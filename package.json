@@ -1,0 +1,14 @@
+{
+  "name": "ypricea",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Ypricea — обробка прайсу постачальника у каталог JSON для GitHub Pages",
+  "scripts": {
+    "build": "node scripts/process.mjs"
+  },
+  "dependencies": {
+    "jsdom": "^29.1.1",
+    "saxes": "^6.0.0"
+  }
+}

@@ -1,0 +1,57 @@
+name: Update price catalog
+
+on:
+  schedule:
+    - cron: '0 */5 * * *'   # кожні 5 годин (UTC: 00,05,10,15,20)
+  workflow_dispatch: {}      # ручний запуск кнопкою
+  push:
+    branches: [ main ]
+    paths:
+      - 'index.html'
+      - 'scripts/**'
+      - 'presets/**'
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install deps
+        run: npm install --no-audit --no-fund
+
+      - name: Build catalog (fetch + process)
+        run: node scripts/process.mjs
+
+      - name: Copy site page
+        run: |
+          cp index.html site/index.html
+          mkdir -p site/assets
+          cp -r assets/* site/assets/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4

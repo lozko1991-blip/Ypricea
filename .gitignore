@@ -1,0 +1,5 @@
+.env.local
+.env
+*.env
+.claudeprompt
+node_modules/
