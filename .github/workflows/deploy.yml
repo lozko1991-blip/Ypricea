@@ -1,0 +1,56 @@
+name: Deploy static files
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'index.html'
+      - 'cabinet.html'
+      - 'assets/**'
+      - 'suppliers.js'
+      - '.github/workflows/deploy.yml'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore site/ from cache (дані з останнього повного rebuild)
+        uses: actions/cache/restore@v4
+        with:
+          path: site
+          key: site-build-latest
+
+      - name: Ensure site/ exists (якщо кеш ще порожній)
+        run: mkdir -p site/assets site/data
+
+      - name: Copy updated static files
+        run: |
+          cp index.html site/index.html
+          [ -f cabinet.html ] && cp cabinet.html site/cabinet.html || true
+          mkdir -p site/assets
+          cp -r assets/* site/assets/ 2>/dev/null || true
+          cp suppliers.js site/suppliers.js 2>/dev/null || true
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

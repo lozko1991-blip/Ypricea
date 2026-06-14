@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Кабінет · UTRADE</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Manrope:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f0f4f8;--surface:#fff;--surface2:#f7f9fc;--border:#e2e8f0;--text:#0f172a;--text2:#64748b;--accent:#2563eb;--green:#10b981;--red:#ef4444;}
+[data-theme=dark]{--bg:#0d1117;--surface:#161b22;--surface2:#0d1117;--border:#30363d;--text:#e6edf3;--text2:#8b949e;--accent:#58a6ff;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Manrope',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+.bebas{font-family:'Bebas Neue',sans-serif;}
+nav{background:var(--surface);border-bottom:1px solid var(--border);}
+input,select,textarea{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:.65rem;font-family:'Manrope',sans-serif;transition:border-color .15s;}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);}
+input::placeholder,textarea::placeholder{color:var(--text2);}
+.tab-btn{padding:.5rem 1rem;border-radius:.65rem;font-size:.78rem;font-weight:800;cursor:pointer;border:none;color:var(--text2);background:transparent;transition:all .15s;}
+.tab-btn.active{background:var(--accent);color:#fff;}
+.tab-btn:hover:not(.active){background:var(--surface2);}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:1rem;padding:1.25rem;}
+.gbtn{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;padding:.55rem 1rem;border-radius:.65rem;font-size:.78rem;font-weight:800;cursor:pointer;border:none;transition:opacity .15s;}
+.gbtn:hover{opacity:.85;}
+.gbtn:disabled{opacity:.45;cursor:not-allowed;}
+.badge{display:inline-flex;align-items:center;gap:.3rem;font-size:.65rem;font-weight:800;padding:.2rem .55rem;border-radius:99px;}
+.sec-title{font-size:.6rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--text2);}
+.cscroll::-webkit-scrollbar{width:5px;}
+.cscroll::-webkit-scrollbar-track{background:transparent;}
+.cscroll::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:10px;}
+[data-theme=dark] .cscroll::-webkit-scrollbar-thumb{background:#30363d;}
+#toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(60px);background:#1e293b;color:#f1f5f9;padding:.6rem 1.2rem;border-radius:.75rem;font-size:.8rem;font-weight:700;z-index:9999;opacity:0;transition:all .35s;pointer-events:none;white-space:nowrap;}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+@media(max-width:767px){
+  input,select,textarea{font-size:16px!important;}
+  .tab-btn{font-size:.72rem;padding:.45rem .7rem;white-space:nowrap;flex-shrink:0;}
+  .card{padding:.9rem;}
+  nav{padding:.6rem 1rem;}
+}
+</style>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="px-4 py-3 flex items-center gap-3">
+  <a href="index.html" class="flex items-center gap-2 text-sm font-black hover:opacity-75" style="color:var(--text);">
+    <i class="fa-solid fa-arrow-left text-xs" style="color:var(--text2);"></i>
+    <span class="bebas tracking-widest" style="font-size:1.3rem;line-height:1;">UTRADE</span>
+    <span class="text-xs font-bold" style="color:var(--text2);">Кабінет</span>
+  </a>
+  <div class="ml-auto flex items-center gap-2">
+    <div id="navUserName" class="text-xs font-bold" style="color:var(--text2);"></div>
+    <button onclick="doLogout()" class="gbtn text-xs" style="background:var(--surface2);border:1px solid var(--border);color:var(--text2);">
+      <i class="fa-solid fa-right-from-bracket"></i> Вийти
+    </button>
+    <button onclick="toggleTheme()" class="w-9 h-9 rounded-xl flex items-center justify-center" style="background:var(--surface2);border:1px solid var(--border);color:var(--text2);">
+      <i id="themeIcon" class="fa-solid fa-moon text-sm"></i>
+    </button>
+  </div>
+</nav>
+
+<!-- AUTH GATE -->
+<div id="authGate" class="flex flex-col items-center justify-center" style="min-height:70vh;gap:1rem;">
+  <i class="fa-solid fa-spinner fa-spin text-3xl" style="color:var(--text2);"></i>
+  <div class="text-sm font-bold" style="color:var(--text2);">Перевірка авторизації...</div>
+</div>
+
+<!-- BLOCKED -->
+<div id="blockedNotice" style="display:none;" class="max-w-lg mx-auto mt-16 p-6 text-center card">
+  <i class="fa-solid fa-ban text-4xl mb-3" style="color:var(--red);"></i>
+  <div class="font-black text-lg mb-2">Акаунт заблоковано</div>
+  <div class="text-sm" style="color:var(--text2);">Зверніться до адміністратора у <a href="https://t.me/sergeymod" class="font-bold" style="color:var(--accent);">Telegram</a> або <a href="viber://chat?number=%2B380666172764" class="font-bold" style="color:#7360f2;">Viber</a>.</div>
+</div>
+
+<!-- MAIN -->
+<div id="cabinetMain" style="display:none;" class="max-w-4xl mx-auto px-4 py-6">
+
+  <!-- Pending banner -->
+  <div id="pendingBanner" style="display:none;" class="mb-4 p-3 rounded-xl flex items-center gap-3 text-sm font-bold" style="background:#fef3c7;border:1px solid #f59e0b;color:#92400e;">
+    <i class="fa-solid fa-clock text-yellow-500"></i>
+    <span style="color:#92400e;">Ваш акаунт на розгляді. Адмін активує його найближчим часом.</span>
+  </div>
+
+  <!-- Tab nav -->
+  <div class="flex gap-1 mb-5 p-1 rounded-2xl overflow-x-auto" style="background:var(--surface);border:1px solid var(--border);-webkit-overflow-scrolling:touch;scrollbar-width:none;">
+    <button class="tab-btn active" data-tab="prices" onclick="selectTab('prices')"><i class="fa-solid fa-file-code mr-1"></i>Прайси</button>
+    <button class="tab-btn" data-tab="orders" onclick="selectTab('orders')"><i class="fa-solid fa-box mr-1"></i>Замовлення</button>
+    <button class="tab-btn" data-tab="profile" onclick="selectTab('profile')"><i class="fa-solid fa-user mr-1"></i>Профіль</button>
+    <button id="adminTabBtn" class="tab-btn" data-tab="admin" onclick="selectTab('admin')" style="display:none;"><i class="fa-solid fa-shield-halved mr-1"></i>Адмін</button>
+  </div>
+
+  <!-- ══ TAB: ПРАЙСИ ══ -->
+  <div id="tab-prices">
+    <div class="card mb-4">
+      <div class="sec-title mb-3">Налаштування націнки</div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <div class="text-xs font-bold mb-2" style="color:var(--text2);">% від дроп-ціни</div>
+          <div class="flex flex-wrap gap-1.5 mb-2">
+            <button class="pct-quick gbtn text-xs" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);" data-v="10">+10%</button>
+            <button class="pct-quick gbtn text-xs" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);" data-v="15">+15%</button>
+            <button class="pct-quick gbtn text-xs" style="background:var(--accent);color:#fff;" data-v="20">+20%</button>
+            <button class="pct-quick gbtn text-xs" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);" data-v="25">+25%</button>
+            <button class="pct-quick gbtn text-xs" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);" data-v="30">+30%</button>
+          </div>
+          <div class="flex items-center gap-2">
+            <input id="markupPct" type="number" min="0" max="300" value="20" class="w-24 px-2 py-1.5 text-sm" oninput="onMarkupChange()">
+            <span class="text-sm font-bold" style="color:var(--text2);">%</span>
+          </div>
+        </div>
+        <div>
+          <div class="text-xs font-bold mb-2" style="color:var(--text2);">Фіксована надбавка (грн)</div>
+          <div class="flex flex-wrap gap-1.5 mb-2">
+            <button class="grn-quick gbtn text-xs" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);" data-v="0">+0 ₴</button>
+            <button class="grn-quick gbtn text-xs" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);" data-v="50">+50 ₴</button>
+            <button class="grn-quick gbtn text-xs" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);" data-v="100">+100 ₴</button>
+            <button class="grn-quick gbtn text-xs" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);" data-v="150">+150 ₴</button>
+          </div>
+          <div class="flex items-center gap-2">
+            <input id="markupGrn" type="number" min="0" max="9999" value="0" class="w-24 px-2 py-1.5 text-sm" oninput="onMarkupChange()">
+            <span class="text-sm font-bold" style="color:var(--text2);">₴</span>
+          </div>
+        </div>
+      </div>
+      <div class="mt-3 text-xs" style="color:var(--text2);">Ціна в прайсі = дроп × (1 + %/100) + ₴. Трансформація відбувається у браузері — завантажується базовий XML і модифікується "на льоту".</div>
+    </div>
+
+    <div class="card">
+      <div class="sec-title mb-3">Доступні прайси</div>
+      <div id="exportsList" class="space-y-2">
+        <div class="text-sm py-4 text-center" style="color:var(--text2);"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Завантаження...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TAB: ЗАМОВЛЕННЯ ══ -->
+  <div id="tab-orders" style="display:none;">
+    <div class="card">
+      <div class="flex items-center justify-between mb-3">
+        <div class="sec-title">Мої замовлення</div>
+        <button onclick="loadOrders()" class="gbtn text-xs" style="background:var(--surface2);border:1px solid var(--border);color:var(--text2);"><i class="fa-solid fa-rotate-right"></i></button>
+      </div>
+      <div id="ordersList" class="space-y-2">
+        <div class="text-sm py-4 text-center" style="color:var(--text2);">Завантаження...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TAB: ПРОФІЛЬ ══ -->
+  <div id="tab-profile" style="display:none;">
+    <div class="card">
+      <div class="sec-title mb-4">Мій профіль</div>
+      <div class="space-y-3 max-w-md">
+        <div>
+          <div class="text-xs font-bold mb-1" style="color:var(--text2);">Email</div>
+          <div id="profileEmail" class="text-sm font-bold" style="color:var(--text2);"></div>
+        </div>
+        <div>
+          <div class="text-xs font-bold mb-1" style="color:var(--text2);">Ваше імʼя *</div>
+          <input id="profileName" type="text" placeholder="Ім'я Прізвище" class="w-full px-3 py-2 text-sm">
+        </div>
+        <div>
+          <div class="text-xs font-bold mb-1" style="color:var(--text2);">Назва магазину</div>
+          <input id="profileStore" type="text" placeholder="Мій магазин" class="w-full px-3 py-2 text-sm">
+        </div>
+        <div>
+          <div class="text-xs font-bold mb-1" style="color:var(--text2);">Телефон</div>
+          <input id="profilePhone" type="tel" placeholder="+380XXXXXXXXX" class="w-full px-3 py-2 text-sm">
+        </div>
+        <div class="flex items-center gap-3 pt-1">
+          <div class="text-xs font-bold" style="color:var(--text2);">Статус:</div>
+          <span id="profileStatus" class="badge"></span>
+        </div>
+        <button onclick="saveProfile()" class="gbtn w-full text-white" style="background:var(--accent);">
+          <i class="fa-solid fa-floppy-disk"></i> Зберегти зміни
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TAB: АДМІН ══ -->
+  <div id="tab-admin" style="display:none;">
+    <!-- Users -->
+    <div class="card mb-4">
+      <div class="flex items-center justify-between mb-3">
+        <div class="sec-title">Користувачі</div>
+        <button onclick="loadAdminUsers()" class="gbtn text-xs" style="background:var(--surface2);border:1px solid var(--border);color:var(--text2);"><i class="fa-solid fa-rotate-right"></i></button>
+      </div>
+      <div id="adminUsersList" class="space-y-2">
+        <div class="text-sm py-3 text-center" style="color:var(--text2);">Завантаження...</div>
+      </div>
+    </div>
+    <!-- All orders -->
+    <div class="card">
+      <div class="flex items-center justify-between mb-3">
+        <div class="sec-title">Всі замовлення</div>
+        <button onclick="loadAdminOrders()" class="gbtn text-xs" style="background:var(--surface2);border:1px solid var(--border);color:var(--text2);"><i class="fa-solid fa-rotate-right"></i></button>
+      </div>
+      <div id="adminOrdersList" class="space-y-2">
+        <div class="text-sm py-3 text-center" style="color:var(--text2);">Завантаження...</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /cabinetMain -->
+
+<div id="toast"></div>
+
+<script>
+// ═══ CONFIG ═══
+const SUPA_URL  = 'https://lvolxxwiknltgxotdicj.supabase.co';
+const SUPA_ANON = 'sb_publishable_R7sjWE6L20aXu7rpLhduSQ__PPB-baf';
+const GH_OWNER  = 'lozko1991-blip';
+const GH_REPO   = 'Ypricea';
+const SITE_BASE = 'https://' + GH_OWNER.toLowerCase() + '.github.io/' + GH_REPO;
+const DATA_BASE = 'data';
+
+// ═══ STATE ═══
+let _supa = null, _user = null, _profile = null, _exports = [];
+
+function db(){
+  if(!_supa) _supa = supabase.createClient(SUPA_URL, SUPA_ANON);
+  return _supa;
+}
+
+// ═══ THEME ═══
+(function(){const t=localStorage.getItem('ypricea_theme');if(t)document.documentElement.setAttribute('data-theme',t);const icon=document.getElementById('themeIcon');if(icon)icon.className=t==='dark'?'fa-solid fa-sun text-sm':'fa-solid fa-moon text-sm';})();
+function toggleTheme(){const t=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',t);localStorage.setItem('ypricea_theme',t);document.getElementById('themeIcon').className=t==='dark'?'fa-solid fa-sun text-sm':'fa-solid fa-moon text-sm';}
+
+// ═══ TOAST ═══
+let _toastTimer;
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(_toastTimer);_toastTimer=setTimeout(()=>t.classList.remove('show'),3000);}
+
+// ═══ AUTH ═══
+async function initAuth(){
+  const { data:{session}, error } = await db().auth.getSession();
+  if(!session){
+    window.location.href='index.html?auth=1';
+    return;
+  }
+  _user = session.user;
+  const { data } = await db().from('profiles').select('*').eq('id',_user.id).single();
+  _profile = data;
+
+  document.getElementById('authGate').style.display='none';
+
+  if(_profile?.status === 'blocked'){
+    document.getElementById('blockedNotice').style.display='block';
+    return;
+  }
+
+  document.getElementById('cabinetMain').style.display='block';
+  document.getElementById('navUserName').textContent = _profile?.name || _user.email;
+
+  if(_profile?.status === 'pending'){
+    document.getElementById('pendingBanner').style.display='flex';
+  }
+
+  if(_profile?.role === 'admin'){
+    document.getElementById('adminTabBtn').style.display='';
+  }
+
+  // Заповнити markup з профілю
+  if(_profile?.markup_pct != null) setMarkupPct(_profile.markup_pct);
+  if(_profile?.markup_grn != null) setMarkupGrn(_profile.markup_grn);
+
+  // Завантажити метадані прайсів заздалегідь (ЯВШОКЕ + Mastereva)
+  try{
+    const ts=Date.now();
+    const [r1,r2]=await Promise.all([
+      fetch(DATA_BASE+'/exports.json?_='+ts),
+      fetch(DATA_BASE+'/exports-me.json?_='+ts)
+    ]);
+    const d1=r1.ok?await r1.json():{};
+    const d2=r2.ok?await r2.json():{};
+    _exports=[...(d1.exports||[]),...(d2.exports||[])];
+  }catch(e){}
+
+  loadExports();
+}
+
+async function doLogout(){
+  await db().auth.signOut();
+  window.location.href='index.html';
+}
+
+// ═══ TABS ═══
+function selectTab(tab){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+  ['prices','orders','profile','admin'].forEach(t=>{
+    const el=document.getElementById('tab-'+t);
+    if(el) el.style.display=t===tab?'':'none';
+  });
+  if(tab==='orders') loadOrders();
+  if(tab==='profile') fillProfile();
+  if(tab==='admin'){ loadAdminUsers(); loadAdminOrders(); }
+}
+
+// ═══ MARKUP ═══
+function setMarkupPct(v){
+  document.getElementById('markupPct').value=v;
+  document.querySelectorAll('.pct-quick').forEach(b=>{
+    const active=Number(b.dataset.v)===Number(v);
+    b.style.background=active?'var(--accent)':'var(--surface2)';
+    b.style.color=active?'#fff':'var(--text)';
+    b.style.border=active?'none':'1px solid var(--border)';
+  });
+}
+function setMarkupGrn(v){
+  document.getElementById('markupGrn').value=v;
+  document.querySelectorAll('.grn-quick').forEach(b=>{
+    const active=Number(b.dataset.v)===Number(v);
+    b.style.background=active?'var(--accent)':'var(--surface2)';
+    b.style.color=active?'#fff':'var(--text)';
+    b.style.border=active?'none':'1px solid var(--border)';
+  });
+}
+function onMarkupChange(){
+  setMarkupPct(document.getElementById('markupPct').value);
+  setMarkupGrn(document.getElementById('markupGrn').value);
+}
+document.querySelectorAll('.pct-quick').forEach(b=>b.addEventListener('click',()=>setMarkupPct(b.dataset.v)));
+document.querySelectorAll('.grn-quick').forEach(b=>b.addEventListener('click',()=>setMarkupGrn(b.dataset.v)));
+
+// ═══ EXPORTS ═══
+function _exportRow(e, i){
+  const url=e.url||(SITE_BASE+'/exports/'+e.name+'.xml');
+  return `<div class="flex items-center gap-3 flex-wrap p-3 rounded-xl" style="background:var(--surface2);border:1px solid var(--border);">
+    <span style="width:36px;height:36px;border-radius:.6rem;background:var(--green);display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;font-size:.75rem;font-weight:900;">${i+1}</span>
+    <div style="flex:1;min-width:0;">
+      <div class="font-black text-sm">${e.name}.xml</div>
+      <div class="text-[11px] font-bold" style="color:var(--text2);">${(e.count||0).toLocaleString('uk')} товарів</div>
+      <code class="text-[10px]" style="color:var(--accent);word-break:break-all;">${url}</code>
+    </div>
+    <div class="flex gap-1.5 shrink-0">
+      <button onclick="downloadWithMarkup('${url}','${e.name}')" class="gbtn text-xs text-white" style="background:var(--accent);">
+        <i class="fa-solid fa-download"></i> Завантажити
+      </button>
+      <button onclick="navigator.clipboard.writeText('${url}').then(()=>showToast('Скопійовано'))" class="gbtn text-xs" style="background:var(--surface);border:1px solid var(--border);color:var(--text);">
+        <i class="fa-solid fa-copy"></i>
+      </button>
+    </div>
+  </div>`;
+}
+
+async function loadExports(){
+  const list=document.getElementById('exportsList');
+
+  if(!_exports.length){
+    list.innerHTML='<div class="text-sm py-4 text-center" style="color:var(--text2);">Прайси ще не згенеровані. Адмін запустить генерацію найближчим часом.</div>';
+    return;
+  }
+
+  // Адмін бачить всі; клієнт — тільки дозволені
+  let visible=_exports;
+  if(_profile?.role !== 'admin'){
+    const allowed=_profile?.allowed_exports;
+    if(!allowed||!allowed.length){
+      list.innerHTML='<div class="text-sm py-4 text-center" style="color:var(--text2);">Прайси ще не призначені. Зверніться до адміністратора.</div>';
+      return;
+    }
+    visible=_exports.filter(e=>allowed.includes(e.name));
+    if(!visible.length){
+      list.innerHTML='<div class="text-sm py-4 text-center" style="color:var(--text2);">Прайси ще не призначені. Зверніться до адміністратора.</div>';
+      return;
+    }
+  }
+
+  list.innerHTML=visible.map((e,i)=>_exportRow(e,i)).join('');
+}
+
+async function downloadWithMarkup(url, baseName){
+  const pct=Number(document.getElementById('markupPct').value)||0;
+  const grn=Number(document.getElementById('markupGrn').value)||0;
+  showToast('⏳ Завантажую XML...');
+  try{
+    const r=await fetch(url);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const xml=await r.text();
+    const transformed=xml.replace(/<price>(\d+(?:\.\d+)?)<\/price>/g,(_,p)=>{
+      const newP=Math.round(+p*(1+pct/100)+grn);
+      return `<price>${newP}</price>`;
+    });
+    const suffix=(pct?'+'+pct+'pct':'')+(grn?'+'+grn+'grn':'');
+    const fname=baseName+(suffix?'-'+suffix:'')+'.xml';
+    const blob=new Blob([transformed],{type:'text/xml;charset=utf-8'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=fname;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+    showToast('✅ Завантажено: '+fname);
+  }catch(e){
+    showToast('⚠️ Помилка: '+e.message);
+  }
+}
+
+// ═══ ORDERS ═══
+const ORDER_STATUS={
+  new:{label:'Нове',bg:'#dbeafe',color:'#1e40af'},
+  processing:{label:'Обробляється',bg:'#fef3c7',color:'#92400e'},
+  shipped:{label:'Відправлено',bg:'#d1fae5',color:'#065f46'},
+  done:{label:'Виконано',bg:'#f0fdf4',color:'#166534'},
+  cancelled:{label:'Скасовано',bg:'#fee2e2',color:'#991b1b'}
+};
+
+function statusBadge(s){
+  const st=ORDER_STATUS[s]||{label:s,bg:'#f1f5f9',color:'#64748b'};
+  return `<span class="badge" style="background:${st.bg};color:${st.color};">${st.label}</span>`;
+}
+
+async function loadOrders(){
+  const list=document.getElementById('ordersList');
+  list.innerHTML='<div class="text-sm py-3 text-center" style="color:var(--text2);"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Завантаження...</div>';
+  const {data,error}=await db().from('orders').select('*').order('created_at',{ascending:false}).limit(50);
+  if(error){list.innerHTML='<div class="text-sm text-center py-3" style="color:var(--red);">Помилка: '+error.message+'</div>';return;}
+  if(!data||!data.length){list.innerHTML='<div class="text-sm py-3 text-center" style="color:var(--text2);">Замовлень ще немає</div>';return;}
+  list.innerHTML=data.map(o=>{
+    const items=Array.isArray(o.items)?o.items:(typeof o.items==='string'?JSON.parse(o.items):[]);
+    const dt=new Date(o.created_at).toLocaleString('uk-UA',{timeZone:'Europe/Kiev',day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+    const profit=Math.round((o.total_sell||0)-(o.total_drop||0));
+    const pc=profit>=0?'#10b981':'#ef4444';
+    return `<div class="p-3 rounded-xl" style="background:var(--surface2);border:1px solid var(--border);">
+      <div class="flex items-start justify-between gap-2 flex-wrap mb-2">
+        <div>
+          <span class="font-black text-sm">#${o.id}</span>
+          <span class="text-xs ml-2" style="color:var(--text2);">${dt}</span>
+        </div>
+        ${statusBadge(o.status)}
+      </div>
+      <div class="text-xs mb-1" style="color:var(--text2);">${o.client_name||'—'} · ${o.client_phone||'—'} · ${o.client_city||'—'}</div>
+      <div class="flex gap-3 flex-wrap text-xs mb-1">
+        <span><span style="color:var(--text2);">Продаж:</span> <strong>${Number(o.total_sell||0).toLocaleString('uk')} ₴</strong></span>
+        <span><span style="color:var(--text2);">Закуп:</span> <span style="color:var(--text2);">${Number(o.total_drop||0).toLocaleString('uk')} ₴</span></span>
+        <span><span style="color:var(--text2);">Прибуток:</span> <strong style="color:${pc};">${profit>=0?'+':''}${profit.toLocaleString('uk')} ₴</strong></span>
+        <span style="color:var(--text2);">${items.length} поз.</span>
+      </div>
+      ${o.ttn?`<div class="text-xs p-2 rounded-lg flex items-center gap-2 mb-1" style="background:var(--surface);border:1px solid var(--border);"><i class="fa-solid fa-truck" style="color:var(--accent);"></i> <span style="color:var(--text2);">ТТН:</span> <strong style="letter-spacing:.05em;">${o.ttn}</strong></div>`:''}
+      ${o.admin_notes?`<div class="text-xs p-2 rounded-lg" style="background:var(--surface);color:var(--text2);border:1px solid var(--border);">📋 ${o.admin_notes}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+// ═══ PROFILE ═══
+function fillProfile(){
+  if(!_user||!_profile) return;
+  document.getElementById('profileEmail').textContent=_user.email;
+  document.getElementById('profileName').value=_profile.name||'';
+  document.getElementById('profileStore').value=_profile.store_name||'';
+  document.getElementById('profilePhone').value=_profile.phone||'';
+  const s=_profile.status;
+  const badge=document.getElementById('profileStatus');
+  const styles={pending:{bg:'#fef3c7',color:'#92400e',label:'На розгляді'},active:{bg:'#d1fae5',color:'#065f46',label:'Активний'},blocked:{bg:'#fee2e2',color:'#991b1b',label:'Заблоковано'}};
+  const st=styles[s]||{bg:'#f1f5f9',color:'#64748b',label:s};
+  badge.style.background=st.bg; badge.style.color=st.color; badge.textContent=st.label;
+}
+
+async function saveProfile(){
+  const name=document.getElementById('profileName').value.trim();
+  const store=document.getElementById('profileStore').value.trim();
+  const phone=document.getElementById('profilePhone').value.trim();
+  const pct=Number(document.getElementById('markupPct').value)||0;
+  const grn=Number(document.getElementById('markupGrn').value)||0;
+  const {error}=await db().from('profiles').update({name,store_name:store,phone,markup_pct:pct,markup_grn:grn}).eq('id',_user.id);
+  if(error){showToast('⚠️ '+error.message);return;}
+  _profile={..._profile,name,store_name:store,phone,markup_pct:pct,markup_grn:grn};
+  document.getElementById('navUserName').textContent=name||_user.email;
+  showToast('✅ Профіль збережено');
+}
+
+// ═══ ADMIN ═══
+async function loadAdminUsers(){
+  const list=document.getElementById('adminUsersList');
+  list.innerHTML='<div class="text-sm py-3 text-center" style="color:var(--text2);"><i class="fa-solid fa-spinner fa-spin mr-2"></i></div>';
+  const {data,error}=await db().from('profiles').select('*').order('created_at',{ascending:false});
+  if(error){list.innerHTML='<div class="text-sm text-center py-3" style="color:var(--red);">'+error.message+'</div>';return;}
+  if(!data||!data.length){list.innerHTML='<div class="text-sm py-3 text-center" style="color:var(--text2);">Немає юзерів</div>';return;}
+  list.innerHTML=data.map(u=>{
+    const st=u.status;
+    const stStyles={pending:{bg:'#fef3c7',color:'#92400e',label:'Очікує'},active:{bg:'#d1fae5',color:'#065f46',label:'Активний'},blocked:{bg:'#fee2e2',color:'#991b1b',label:'Блок'}};
+    const ss=stStyles[st]||{bg:'#f1f5f9',color:'#64748b',label:st};
+    const isMe=u.id===_user.id;
+    const dt=new Date(u.created_at).toLocaleDateString('uk-UA');
+    const uid=u.id;
+    const allowed=u.allowed_exports||[];
+    const expCheckboxes=_exports.length?`
+      <div class="w-full mt-2 pt-2" id="exp-${uid}" style="display:none;border-top:1px solid var(--border);">
+        <div class="text-[11px] font-bold mb-1.5" style="color:var(--text2);">Доступні прайси (${allowed.length}/${_exports.length}):</div>
+        <div class="flex flex-wrap gap-1.5 mb-2">
+          ${_exports.map(e=>`<label class="flex items-center gap-1 text-[11px] font-bold cursor-pointer px-2 py-1 rounded-lg" style="background:var(--surface);border:1px solid var(--border);">
+            <input type="checkbox" value="${e.name}" ${allowed.includes(e.name)?'checked':''} data-uid="${uid}" class="exp-cb">
+            ${e.name}
+          </label>`).join('')}
+        </div>
+        <button onclick="saveUserExports('${uid}')" class="gbtn text-[11px] text-white" style="background:var(--accent);padding:.3rem .7rem;"><i class="fa-solid fa-floppy-disk mr-1"></i>Зберегти</button>
+      </div>`:''
+    ;
+    return `<div class="p-2.5 rounded-xl" style="background:var(--surface2);border:1px solid var(--border);">
+      <div class="flex items-center gap-2 flex-wrap">
+        <div style="flex:1;min-width:0;">
+          <div class="font-black text-sm">${u.name||'—'} ${isMe?'<span style="color:var(--text2);font-size:.65rem;">(ви)</span>':''}</div>
+          <div class="text-[11px]" style="color:var(--text2);">${u.store_name||''} · ${dt}</div>
+          <div class="text-[11px]" style="color:var(--text2);">${u.markup_pct||0}% + ${u.markup_grn||0}₴${u.notes?' · '+u.notes:''}</div>
+        </div>
+        <span class="badge" style="background:${ss.bg};color:${ss.color};">${ss.label}</span>
+        ${!isMe?`<div class="flex gap-1 flex-wrap">
+          ${st!=='active'?`<button onclick="setUserStatus('${uid}','active',this)" class="gbtn text-[11px] text-white" style="background:var(--green);padding:.3rem .6rem;">Активувати</button>`:''}
+          ${st!=='blocked'?`<button onclick="setUserStatus('${uid}','blocked',this)" class="gbtn text-[11px] text-white" style="background:var(--red);padding:.3rem .6rem;">Блок</button>`:''}
+          ${st==='blocked'?`<button onclick="setUserStatus('${uid}','pending',this)" class="gbtn text-[11px]" style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:.3rem .6rem;">Розблок</button>`:''}
+          ${_exports.length?`<button onclick="toggleExpPanel('${uid}')" class="gbtn text-[11px]" style="background:var(--surface);border:1px solid var(--border);color:var(--accent);padding:.3rem .6rem;" title="Прайси"><i class="fa-solid fa-file-code"></i>${allowed.length?` <span style="font-size:.6rem;">${allowed.length}</span>':''}</button>`:''}
+        </div>`:''}
+      </div>
+      ${!isMe?expCheckboxes:''}
+    </div>`;
+  }).join('');
+}
+
+async function setUserStatus(uid, status, btn){
+  btn.disabled=true;
+  const {error}=await db().from('profiles').update({status}).eq('id',uid);
+  if(error){showToast('⚠️ '+error.message);btn.disabled=false;return;}
+  showToast('✅ Статус змінено');
+  loadAdminUsers();
+}
+
+function toggleExpPanel(uid){
+  const el=document.getElementById('exp-'+uid);
+  if(el) el.style.display=el.style.display==='none'?'block':'none';
+}
+
+async function saveUserExports(uid){
+  const checkboxes=document.querySelectorAll(`.exp-cb[data-uid="${uid}"]`);
+  const allowed=Array.from(checkboxes).filter(c=>c.checked).map(c=>c.value);
+  const {error}=await db().from('profiles').update({allowed_exports:allowed}).eq('id',uid);
+  if(error){showToast('⚠️ '+error.message);return;}
+  showToast('✅ Прайси оновлено ('+allowed.length+')');
+  loadAdminUsers();
+}
+
+async function loadAdminOrders(){
+  const list=document.getElementById('adminOrdersList');
+  list.innerHTML='<div class="text-sm py-3 text-center" style="color:var(--text2);"><i class="fa-solid fa-spinner fa-spin mr-2"></i></div>';
+  const {data,error}=await db().from('orders').select('*').order('created_at',{ascending:false}).limit(100);
+  if(error){list.innerHTML='<div class="text-sm text-center py-3" style="color:var(--red);">'+error.message+'</div>';return;}
+  if(!data||!data.length){list.innerHTML='<div class="text-sm py-3 text-center" style="color:var(--text2);">Замовлень ще немає</div>';return;}
+  list.innerHTML=data.map(o=>{
+    const items=Array.isArray(o.items)?o.items:(typeof o.items==='string'?JSON.parse(o.items):[]);
+    const dt=new Date(o.created_at).toLocaleString('uk-UA',{timeZone:'Europe/Kiev',day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+    return `<div class="p-3 rounded-xl" style="background:var(--surface2);border:1px solid var(--border);">
+      <div class="flex items-start justify-between gap-2 flex-wrap mb-1.5">
+        <div>
+          <span class="font-black text-sm">#${o.id}</span>
+          <span class="text-xs ml-2" style="color:var(--text2);">${dt}</span>
+        </div>
+        <select onchange="updateOrderStatus(${o.id},this.value)" class="text-xs px-2 py-1 rounded-lg" style="font-weight:800;">
+          ${['new','processing','shipped','done','cancelled'].map(s=>`<option value="${s}"${o.status===s?' selected':''}>${ORDER_STATUS[s]?.label||s}</option>`).join('')}
+        </select>
+      </div>
+      <div class="text-xs mb-1"><strong>${o.client_name||'—'}</strong> · ${o.client_phone||'—'} · ${o.client_city||'—'}</div>
+      <div class="text-xs mb-2" style="color:var(--text2);">${items.length} поз. · <strong style="color:var(--text);">${Number(o.total_sell||0).toLocaleString('uk')} ₴</strong> продаж · закуп ${Number(o.total_drop||0).toLocaleString('uk')} ₴ · <strong style="color:#10b981;">+${Math.round((o.total_sell||0)-(o.total_drop||0)).toLocaleString('uk')} ₴</strong></div>
+      <div class="space-y-1.5">
+        <div class="flex gap-2 items-center">
+          <i class="fa-solid fa-truck text-xs w-4 text-center" style="color:var(--accent);flex-shrink:0;"></i>
+          <input type="text" value="${(o.ttn||'').replace(/"/g,'&quot;')}" placeholder="ТТН Нової Пошти..." class="flex-1 px-2 py-1 text-xs rounded-lg" id="attn-${o.id}">
+          <button onclick="saveAdminTTN(${o.id})" class="gbtn text-xs" style="background:var(--accent);color:#fff;padding:.3rem .6rem;">ТТН</button>
+        </div>
+        <div class="flex gap-2 items-center">
+          <i class="fa-solid fa-comment text-xs w-4 text-center" style="color:var(--text2);flex-shrink:0;"></i>
+          <input type="text" value="${(o.admin_notes||'').replace(/"/g,'&quot;')}" placeholder="Коментар для дропера..." class="flex-1 px-2 py-1 text-xs rounded-lg" id="anote-${o.id}">
+          <button onclick="saveAdminNote(${o.id})" class="gbtn text-xs" style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:.3rem .6rem;">OK</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function updateOrderStatus(id, status){
+  const {error}=await db().from('orders').update({status}).eq('id',id);
+  if(error) showToast('⚠️ '+error.message);
+  else showToast('✅ Статус оновлено');
+}
+
+async function saveAdminNote(id){
+  const notes=document.getElementById('anote-'+id)?.value||'';
+  const {error}=await db().from('orders').update({admin_notes:notes}).eq('id',id);
+  if(error) showToast('⚠️ '+error.message);
+  else showToast('✅ Збережено');
+}
+
+async function saveAdminTTN(id){
+  const ttn=document.getElementById('attn-'+id)?.value.trim()||'';
+  const {error}=await db().from('orders').update({ttn, status: ttn?'shipped':'processing'}).eq('id',id);
+  if(error){showToast('⚠️ '+error.message);return;}
+  showToast('🚚 ТТН збережено, статус → Відправлено');
+  // Оновити select статусу в UI
+  const sel=document.querySelector(`[onchange="updateOrderStatus(${id},this.value)"]`);
+  if(sel&&ttn) sel.value='shipped';
+}
+
+// ═══ INIT ═══
+initAuth();
+</script>
+</body>
+</html>

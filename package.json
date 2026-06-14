@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Ypricea — обробка прайсу постачальника у каталог JSON для GitHub Pages",
   "scripts": {
-    "build": "node scripts/process.mjs"
+    "build": "node process.mjs"
   },
   "dependencies": {
     "jsdom": "^29.1.1",

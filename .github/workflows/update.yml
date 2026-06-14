@@ -7,10 +7,10 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'index.html'
-      - 'scripts/**'
+      - 'process.mjs'
+      - 'suppliers.js'
       - 'presets/**'
-      - '.github/workflows/**'
+      - '.github/workflows/update.yml'
 
 permissions:
   contents: read
@@ -40,13 +40,27 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Build catalog (fetch + process)
-        run: node scripts/process.mjs
+        run: node process.mjs
 
-      - name: Copy site page
+      - name: Copy static files
         run: |
           cp index.html site/index.html
+          [ -f cabinet.html ] && cp cabinet.html site/cabinet.html || true
+          cp suppliers.js site/suppliers.js
           mkdir -p site/assets
-          cp -r assets/* site/assets/
+          cp -r assets/* site/assets/ 2>/dev/null || true
+
+      - name: Delete old cache (щоб не накопичувалось)
+        run: |
+          gh cache delete site-build-latest --repo ${{ github.repository }} 2>/dev/null || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Save site/ to cache
+        uses: actions/cache/save@v4
+        with:
+          path: site
+          key: site-build-latest
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

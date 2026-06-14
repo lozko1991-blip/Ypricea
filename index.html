@@ -6,6 +6,7 @@
 <title>UTRADE | Дроп-платформа · каталог та генератор прайсу</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="assets/suppliers.js"></script>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Manrope:wght@400;600;700;800;900&display=swap" rel="stylesheet">
@@ -48,6 +49,14 @@ input::placeholder,textarea::placeholder{color:var(--text2);}
 nav{background:var(--surface);border-bottom:1px solid var(--border);}
 .feat-card{background:var(--surface);border:1px solid var(--border);border-radius:1rem;overflow:hidden;transition:transform .25s,box-shadow .25s;cursor:pointer;}
 .feat-card:hover{transform:translateY(-4px);box-shadow:0 16px 40px rgba(37,99,235,.12);}
+.dropper-price{display:none;}
+body.dropper-mode .dropper-price{display:block;}
+.dropper-modal-row{display:none;}
+body.dropper-mode .dropper-modal-row{display:flex;}
+.admin-only{display:none !important;}
+body.admin-mode .admin-only{display:block !important;}
+body.admin-mode .admin-only-flex{display:flex !important;}
+.admin-only-flex{display:none !important;}
 @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 .fade-up{animation:fadeUp .3s ease both;}
 .cart-open{transform:translateX(0)!important;}
@@ -161,6 +170,27 @@ nav{background:var(--surface);border-bottom:1px solid var(--border);}
 .order-total-value{font-size:1.4rem;font-weight:900;}
 #orderSuccessClose{padding:1rem 2rem;margin-top:1.5rem;width:100%;border-radius:1rem;font-size:.85rem;font-weight:800;cursor:pointer;transition:all .2s;text-align:center;border:none;color:#fff;}
 #orderSuccessClose:hover{opacity:.85;}
+/* ── Mobile bottom navigation ── */
+#mobileBottomNav{display:none;background:var(--surface);border-bottom:1.5px solid var(--border);}
+.mnav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:.55rem .2rem;background:none;border:none;color:var(--text2);cursor:pointer;position:relative;transition:color .15s;min-width:0;-webkit-tap-highlight-color:transparent;}
+.mnav-btn:active{opacity:.55;}
+.mnav-btn.auth-active{color:var(--accent);}
+.mnav-icon{font-size:1.1rem;line-height:1;}
+.mnav-label{font-size:.58rem;font-weight:800;line-height:1;margin-top:2px;white-space:nowrap;}
+@media(max-width:767px){
+  #mobileBottomNav{display:flex;}
+  .pcard h3{font-size:.75rem!important;}
+  /* prevent iOS auto-zoom on input focus */
+  #searchInput,#catSearch{font-size:16px!important;}
+  #checkoutForm input,#checkoutForm select,#checkoutForm textarea{font-size:16px!important;padding-top:.7rem!important;padding-bottom:.7rem!important;}
+  /* more comfortable product grid on mobile */
+  #productGrid.grid{gap:.65rem!important;}
+  .pcard{padding:.6rem!important;}
+  /* supplier tabs — горизонтальний скрол без перенесення */
+  #supplierTabs{flex-wrap:nowrap!important;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px;}
+  /* прибрати зайві кнопки контактів з верхнього nav — вони займали місце */
+  .hide-mobile{display:none!important;}
+}
 </style>
 </head>
 <body data-theme="light">
@@ -169,7 +199,8 @@ nav{background:var(--surface);border-bottom:1px solid var(--border);}
 <div id="toast">✓ Додано до кошика</div>
 
 <!-- NAV (як у попередньому проекті) -->
-<nav class="sticky top-0 z-50 backdrop-blur-md" style="top:3px;">
+<div class="sticky top-0 z-50 backdrop-blur-md">
+<nav>
   <div class="max-w-[1700px] mx-auto px-3 sm:px-4 py-2 flex flex-wrap items-center gap-2">
     <a href="#" class="flex items-center gap-2.5 shrink-0">
       <div class="w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-md" style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);">
@@ -190,18 +221,18 @@ nav{background:var(--surface);border-bottom:1px solid var(--border);}
     </div>
 
     <div class="flex items-center gap-1.5 ml-auto order-2 sm:order-3">
-      <button onclick="scrollToGen()" class="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-black hover:opacity-85 shrink-0"
+      <button onclick="scrollToGen()" class="admin-only-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-black hover:opacity-85 shrink-0"
               style="background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;box-shadow:0 2px 10px rgba(37,99,235,.35);">
         <i class="fa-solid fa-wand-magic-sparkles text-sm"></i>
         <span class="hidden lg:inline">Генератор прайсу</span>
       </button>
-      <button onclick="openContact()" class="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-bold hover:opacity-80 shrink-0" style="background:var(--surface2);border:1px solid var(--border);color:var(--text2);" title="Про нас">
+      <button onclick="openContact()" class="hide-mobile flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-bold hover:opacity-80 shrink-0" style="background:var(--surface2);border:1px solid var(--border);color:var(--text2);" title="Про нас">
         <i class="fa-solid fa-circle-info text-sm"></i><span class="hidden xl:inline">Про нас</span>
       </button>
-      <a href="viber://chat?number=%2B380666172764" class="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-bold text-white hover:opacity-85 shrink-0" style="background:#7360f2;" title="Написати у Viber">
+      <a href="viber://chat?number=%2B380666172764" class="hide-mobile flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-bold text-white hover:opacity-85 shrink-0" style="background:#7360f2;" title="Написати у Viber">
         <i class="fa-brands fa-viber text-sm"></i><span class="hidden xl:inline">Viber</span>
       </a>
-      <a href="https://t.me/sergeymod" target="_blank" rel="noopener" class="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-bold text-white hover:opacity-85 shrink-0" style="background:#2aabee;" title="Написати у Telegram">
+      <a href="https://t.me/sergeymod" target="_blank" rel="noopener" class="hide-mobile flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-bold text-white hover:opacity-85 shrink-0" style="background:#2aabee;" title="Написати у Telegram">
         <i class="fa-brands fa-telegram text-sm"></i><span class="hidden xl:inline">Telegram</span>
       </a>
       <button onclick="toggleTheme()" class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style="background:var(--surface2);border:1px solid var(--border);color:var(--text2);">
@@ -218,8 +249,12 @@ nav{background:var(--surface);border-bottom:1px solid var(--border);}
         <i class="fa-brands fa-github text-sm"></i>
         <span id="ghNavDot" class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border-2 hidden" style="border-color:var(--surface);background:#10b981;"></span>
       </button>
-      <button onclick="toggleAside(true)" class="lg:hidden w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style="background:var(--surface2);border:1px solid var(--border);color:var(--text2);">
+      <button onclick="toggleAside(true)" class="hidden md:flex lg:hidden w-9 h-9 rounded-xl items-center justify-center shrink-0" style="background:var(--surface2);border:1px solid var(--border);color:var(--text2);">
         <i class="fa-solid fa-sliders text-sm"></i>
+      </button>
+      <button onclick="openAuthOrCabinet()" id="authNavBtn" class="w-9 h-9 rounded-xl flex items-center justify-center relative shrink-0" style="background:var(--surface2);border:1px solid var(--border);color:var(--text2);" title="Кабінет / Увійти">
+        <i class="fa-solid fa-user text-sm"></i>
+        <span id="authNavDot" class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border-2 hidden" style="border-color:var(--surface);background:var(--green);"></span>
       </button>
       <button onclick="toggleCart(true)" class="w-9 h-9 rounded-xl flex items-center justify-center relative text-white shrink-0" style="background:var(--text);">
         <i class="fa-solid fa-bag-shopping text-sm"></i>
@@ -228,6 +263,37 @@ nav{background:var(--surface);border-bottom:1px solid var(--border);}
     </div>
   </div>
 </nav>
+
+<!-- MOBILE TOP NAV -->
+<nav id="mobileBottomNav">
+  <button class="mnav-btn" onclick="toggleAside(true)">
+    <i class="mnav-icon fa-solid fa-layer-group"></i>
+    <span class="mnav-label">Категорії</span>
+  </button>
+  <button class="mnav-btn" onclick="focusMobileSearch()">
+    <i class="mnav-icon fa-solid fa-magnifying-glass"></i>
+    <span class="mnav-label">Пошук</span>
+  </button>
+  <button class="mnav-btn" onclick="toggleCart(true)">
+    <span style="position:relative;display:inline-flex;align-items:center;justify-content:center;">
+      <i class="mnav-icon fa-solid fa-bag-shopping"></i>
+      <span id="mobileCartBadge" style="display:none;position:absolute;top:-7px;right:-9px;background:#ef4444;color:#fff;font-size:.5rem;font-weight:900;min-width:14px;height:14px;border-radius:99px;line-height:14px;text-align:center;padding:0 3px;border:1.5px solid var(--surface);"></span>
+    </span>
+    <span class="mnav-label">Кошик</span>
+  </button>
+  <button class="mnav-btn" id="mobileAuthBtn" onclick="openAuthOrCabinet()">
+    <span style="position:relative;display:inline-flex;align-items:center;justify-content:center;">
+      <i class="mnav-icon fa-solid fa-user" id="mobileAuthIcon"></i>
+      <span id="mobileAuthDot" style="display:none;position:absolute;top:-4px;right:-7px;width:8px;height:8px;border-radius:50%;background:var(--green);border:1.5px solid var(--surface);"></span>
+    </span>
+    <span class="mnav-label" id="mobileAuthLabel">Кабінет</span>
+  </button>
+  <button class="mnav-btn" onclick="openContact()">
+    <i class="mnav-icon fa-solid fa-circle-info"></i>
+    <span class="mnav-label">Контакти</span>
+  </button>
+</nav>
+</div>
 
 <div class="max-w-[1700px] mx-auto px-4 py-5">
   <div class="flex gap-5">
@@ -378,7 +444,7 @@ nav{background:var(--surface);border-bottom:1px solid var(--border);}
       </section>
 
       <!-- ════ ГЕНЕРАТОР ПРАЙСУ (внизу) ════ -->
-      <section id="genSection" class="mt-6 mb-16">
+      <section id="genSection" class="admin-only mt-6 mb-16">
         <div class="flex items-center gap-2 mb-4">
           <div class="w-1 h-5 rounded-full" style="background:var(--accent);"></div>
           <span class="bebas tracking-widest" style="font-size:1.5rem;">Генератор прайсу для Prom.ua</span>
@@ -469,7 +535,7 @@ nav{background:var(--surface);border-bottom:1px solid var(--border);}
       </section>
 
       <!-- ═══════════ ГЕНЕРАТОР ПРАЙСУ MASTEREVA (окремий) ═══════════ -->
-      <section id="meGenSection" class="mt-2 mb-8">
+      <section id="meGenSection" class="admin-only mt-2 mb-8">
         <div class="flex items-center gap-2 mb-4">
           <div class="w-1 h-5 rounded-full" style="background:#7c3aed;"></div>
           <span class="bebas tracking-widest" style="font-size:1.5rem;">Генератор прайсу Mastereva</span>
@@ -626,11 +692,6 @@ nav{background:var(--surface);border-bottom:1px solid var(--border);}
         <select id="paymentType" class="w-full px-3 py-2.5 text-sm font-bold">
           <option>Накладений платіж</option><option>Передоплата</option><option>Карткою при отриманні</option>
         </select>
-        <!-- Код дропера прихований (поки не потрібен). Поле лишається для збереження
-             в localStorage та сумісності з submitOrder. Щоб увімкнути назад —
-             прибери style="display:none" і поверни перевірку в submitOrder.
-        -->
-        <input id="droperCode" type="text" placeholder="Ваш код дропера (напр. DROP001)" class="w-full px-3 py-2.5 text-sm" style="display:none;border-color:var(--accent);">
         <textarea id="clientComment" placeholder="Коментар (необов'язково)" rows="2" class="w-full px-3 py-2.5 text-sm resize-none"></textarea>
       </div>
       <div class="grid grid-cols-1 gap-2">
@@ -924,6 +985,35 @@ nav{background:var(--surface);border-bottom:1px solid var(--border);}
   </div>
 </div>
 
+<div id="authModal" onclick="if(event.target===this)closeAuthModal()" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:.75rem;">
+  <div style="width:100%;max-width:400px;border-radius:1.25rem;background:var(--surface);padding:1.5rem;border:1px solid var(--border);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+      <div>
+        <div class="bebas tracking-widest" style="font-size:1.3rem;line-height:1;">Кабінет UTRADE</div>
+        <div class="sec-title" style="margin-top:3px;">Увійдіть або зареєструйтесь</div>
+      </div>
+      <button onclick="closeAuthModal()" style="width:30px;height:30px;border-radius:.5rem;background:var(--surface2);color:var(--text2);border:none;cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="flex gap-1 mb-4 p-1 rounded-xl" style="background:var(--surface2);border:1px solid var(--border);">
+      <button id="authTab-login" class="sl-tab active flex-1 py-1.5 rounded-lg text-xs font-black" onclick="selectAuthTab('login')" style="border:none;cursor:pointer;">Увійти</button>
+      <button id="authTab-register" class="sl-tab flex-1 py-1.5 rounded-lg text-xs font-black" onclick="selectAuthTab('register')" style="border:none;cursor:pointer;">Реєстрація</button>
+    </div>
+    <div id="authPanel-login">
+      <input id="authEmail" type="email" placeholder="Email" class="w-full px-3 py-2 text-sm mb-2" style="border-radius:.65rem;">
+      <input id="authPass" type="password" placeholder="Пароль" class="w-full px-3 py-2 text-sm mb-3" style="border-radius:.65rem;" onkeydown="if(event.key==='Enter')doLogin()">
+      <button id="loginBtn" onclick="doLogin()" class="w-full py-2.5 text-sm font-black text-white" style="background:var(--accent);border:none;border-radius:.65rem;cursor:pointer;">Увійти</button>
+    </div>
+    <div id="authPanel-register" style="display:none;">
+      <input id="regName" type="text" placeholder="Ваше імʼя *" class="w-full px-3 py-2 text-sm mb-2" style="border-radius:.65rem;">
+      <input id="regStore" type="text" placeholder="Назва магазину (необовʼязково)" class="w-full px-3 py-2 text-sm mb-2" style="border-radius:.65rem;">
+      <input id="regEmail" type="email" placeholder="Email *" class="w-full px-3 py-2 text-sm mb-2" style="border-radius:.65rem;">
+      <input id="regPass" type="password" placeholder="Пароль (мін. 6 символів) *" class="w-full px-3 py-2 text-sm mb-3" style="border-radius:.65rem;">
+      <button id="registerBtn" onclick="doRegister()" class="w-full py-2.5 text-sm font-black text-white" style="background:var(--accent);border:none;border-radius:.65rem;cursor:pointer;">Зареєструватись</button>
+      <p class="text-[10px] mt-2 text-center" style="color:var(--text2);">Реєстрація відкрита — доступ одразу після підтвердження</p>
+    </div>
+  </div>
+</div>
+
 <div id="mappingPreviewModal" onclick="if(event.target===this)closeMappingPreview()" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:.75rem;">
   <div style="width:100%;max-width:680px;max-height:90vh;border-radius:1.25rem;background:var(--surface);padding:1.5rem;border:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-shrink:0;">
@@ -982,8 +1072,15 @@ const APPS_SCRIPT_URL = 'https://utrade-orders.lozko1991.workers.dev'; // тві
 const TG_BOT_TOKEN = '8767253093:AAFn4NqhiboZR-SQgMkBU9Mc_3OVej9zyWQ'; // токен бота zakazutrade_bot
 const TG_CHAT_ID   = '5251531339';                                     // куди слати (твій chat_id)
 const SHOP_NAME    = 'UTRADE';
-const SHOP_EMAIL   = '';   // email для formsubmit.co (порожньо = email вимкнено, лишається тільки Telegram)
+const SHOP_EMAIL   = 'lozko1991@gmail.com';   // email для formsubmit.co (порожньо = email вимкнено, лишається тільки Telegram)
 const NOTIFY_ENABLED = true;
+
+// ── Supabase SaaS ──
+const SUPA_URL  = 'https://lvolxxwiknltgxotdicj.supabase.co';
+const SUPA_ANON = 'sb_publishable_R7sjWE6L20aXu7rpLhduSQ__PPB-baf';
+let _supaClient = null;
+function supa(){ if(!_supaClient && window.supabase && !SUPA_URL.startsWith('YOUR')) _supaClient=window.supabase.createClient(SUPA_URL,SUPA_ANON); return _supaClient; }
+let _supaUser = null, _supaProfile = null;
 
 const PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%A6%3C/text%3E%3C/svg%3E";
 
@@ -1355,6 +1452,7 @@ async function init(){
     refreshGhUI();
     refreshStopNavDot();
     refreshMappingStatus();
+    initSupabaseAuth();
     renderMeTree(); updateMeSummary(); loadMeExports();
     if(typeof renderSupplierLegend==='function') renderSupplierLegend();
     if(typeof renderSupplierTabs==='function') renderSupplierTabs();
@@ -1363,10 +1461,13 @@ async function init(){
 }
 function setText(id,v){const el=document.getElementById(id);if(el)el.textContent=v;}
 
-// мапа товарів по категоріях — будуємо ОДИН раз
+// мапа товарів по категоріях + пошуковий pre-index — будуємо ОДИН раз
 function buildProductIndex(){
   productsByCat={};
-  for(const p of allProducts){(productsByCat[p.catId]=productsByCat[p.catId]||[]).push(p);}
+  for(const p of allProducts){
+    (productsByCat[p.catId]=productsByCat[p.catId]||[]).push(p);
+    p._ss=_buildSS(p);
+  }
 }
 // fallback-лічильники якщо у файлі їх не було
 function computeCountsFromProducts(){
@@ -1500,9 +1601,7 @@ function srcCounts(){
 }
 // Коротка назва постачальника без префікса "Mastereva · "
 function supplierShortName(key){
-  const lbl=SUPPLIERS.info(key).label||key;
-  const i=lbl.indexOf('·');
-  return i>=0?lbl.slice(i+1).trim():lbl;   // "Mastereva · Lugi" → "Lugi", "ЯВШОКЕ" → "ЯВШОКЕ"
+  return SUPPLIERS.info(key).short||key;   // ЯВ, OD, LU, KO, SH, DR, RT
 }
 function renderSupplierTabs(){
   const box=document.getElementById('supplierTabs'); if(!box||!window.SUPPLIERS)return;
@@ -1545,24 +1644,71 @@ function renderFeatured(){
     <div class="flex items-center gap-2 mb-4"><div class="w-1 h-5 rounded-full" style="background:var(--accent);"></div><span class="bebas tracking-widest" style="font-size:1.3rem;">Всі товари</span></div>`;
 }
 
+// ═══ SMART SEARCH ENGINE ═══
+// Нормалізація: lowercase + уніфікація ї/і/є→и/е + ё→е + подвійні приголосні→одна
+const _NC={'ё':'е','ъ':'','і':'и','ї':'и','є':'е'};
+function _normStr(s){
+  return String(s||'').toLowerCase()
+    .replace(/[ёъіїє]/g,c=>_NC[c]||c)
+    .replace(/([бвгджзклмнпрстфхцчшщ])\1+/g,'$1');
+}
+// Транслітерація кир→лат (для пошуку "адідас" коли в назві "Adidas")
+const _TR='а:a,б:b,в:v,г:g,д:d,е:e,ж:zh,з:z,и:i,й:y,к:k,л:l,м:m,н:n,о:o,п:p,р:r,с:s,т:t,у:u,ф:f,х:x,ц:ts,ч:ch,ш:sh,щ:sh,ь:,ю:yu,я:ya'.split(',').reduce((m,p)=>{const[k,v]=p.split(':');m[k]=v===undefined?'':v;return m;},{});
+function _cyr2lat(s){return s.replace(/[а-яё]/g,c=>_TR[c]!==undefined?_TR[c]:c);}
+// Словник брендів: нормалізована кирилиця → латиниця (для неочевидної транслітерації)
+const _BRANDS={
+  'найк':'nike','нике':'nike',
+  'адидас':'adidas',
+  'пума':'puma',
+  'рибок':'reebok',
+  'нью баланс':'new balance','нью беленс':'new balance',
+  'фила':'fila',
+  'конверс':'converse',
+  'ванс':'vans',
+  'асикс':'asics',
+  'самсунг':'samsung',
+  'сони':'sony',
+  'хуавей':'huawei','хуавеи':'huawei',
+  'сяоми':'xiaomi','ксяоми':'xiaomi',
+  'аирподс':'airpods','аирподс':'airpods',
+  'апл':'apple','епл':'apple',
+};
+// Будуємо pre-index рядок для товару — один раз при завантаженні
+function _buildSS(p){
+  const ua=_normStr(p.nameUa), ru=_normStr(p.nameRu), vc=(p.vendorCode||'').toLowerCase(), id=String(p.id);
+  let s=ua+' '+ru+' '+vc+' '+id;
+  // Транслітеровані копії — щоб "adidas" знайшлося при пошуку "адідас" і навпаки
+  const uaL=_cyr2lat(ua); if(uaL!==ua)s+=' '+uaL;
+  const ruL=_cyr2lat(ru); if(ruL!==ru)s+=' '+ruL;
+  return s;
+}
+// Парсинг запиту → масив токенів з усіма варіантами для матчингу
+function _parseQuery(raw){
+  let q=_normStr(raw);
+  // Спершу замінюємо багатослівні бренди (до розбиття на токени)
+  for(const[k,v] of Object.entries(_BRANDS)) if(k.includes(' ')&&q.includes(k)) q=q.split(k).join(v);
+  return q.split(/\s+/).filter(Boolean).map(t=>{
+    const brand=_BRANDS[t]||null;
+    const lat=_cyr2lat(t);
+    return {t, brand, lat:lat!==t?lat:null};
+  });
+}
+// Smart match: ВСІ токени мають знайтись (AND); кожен токен шукається і в orig і в translit і в brand
+function prodMatches(p,tokens){
+  const s=p._ss||(p._ss=_buildSS(p));
+  return tokens.every(({t,brand,lat})=>s.includes(t)||(brand&&s.includes(brand))||(lat&&s.includes(lat)));
+}
+
 // ═══ SEARCH / FILTER ═══
 function onSearchInput(){clearTimeout(searchDebounce);const v=document.getElementById('searchInput').value;document.getElementById('searchClearBtn').classList.toggle('hidden',!v);searchDebounce=setTimeout(()=>{currentPage=1;performSearch();},200);}
 function onPriceInput(){clearTimeout(priceDebounce);priceDebounce=setTimeout(()=>{currentPage=1;performSearch();},300);}
 function clearSearch(){document.getElementById('searchInput').value='';document.getElementById('searchClearBtn').classList.add('hidden');currentPage=1;performSearch();}
 function setView(m){viewMode=m;document.getElementById('vGrid').classList.toggle('active',m==='grid');document.getElementById('vList').classList.toggle('active',m==='list');performSearch();}
 
-// Пошук по полях товару без збереженого searchText (економія RAM).
-// Ранній вихід при першому збігу — швидко навіть на 100k товарів.
-function prodMatches(p,q){
-  if(p.nameUa&&p.nameUa.toLowerCase().includes(q))return true;
-  if(p.id&&String(p.id).toLowerCase().includes(q))return true;
-  if(p.vendorCode&&p.vendorCode.toLowerCase().includes(q))return true;
-  if(p.nameRu&&p.nameRu.toLowerCase().includes(q))return true;
-  return false;
-}
 function currentFiltered(){
   readMargin();
   const q=document.getElementById('searchInput').value.toLowerCase().trim();
+  const tokens=q?_parseQuery(q):[];
   const minP=parseFloat(document.getElementById('minPrice').value)||0;
   const maxP=parseFloat(document.getElementById('maxPrice').value)||9999999;
   // базовий набір: якщо вибрана категорія — беремо лише її піддерево з мапи (швидко)
@@ -1577,7 +1723,7 @@ function currentFiltered(){
       const ps=p.src||'yavshoke';
       if(ps!==currentSrc)return false;
     }
-    if(q&&!prodMatches(p,q))return false;
+    if(tokens.length&&!prodMatches(p,tokens))return false;
     if(hasPrice){const dp=dispPrice(p); if(dp<minP||dp>maxP)return false;}
     return true;
   });
@@ -1627,7 +1773,7 @@ function renderGrid(list,q=''){
       <img src="${p.img}" class="w-14 h-14 object-contain rounded-lg shrink-0" style="background:var(--surface2)" loading="lazy" onerror="this.src='${PLACEHOLDER}'">
       <div class="min-w-0 flex-1"><div class="text-xs font-bold uppercase line-clamp-1" style="color:var(--text)">${highlightText(p.nameUa,q)}</div>
       <div class="text-[10px] font-bold flex items-center gap-1.5" style="color:var(--text2)">ID ${p.id}${p.available?'':' · немає'} ${prodBadge(p)}</div></div>
-      <div class="text-right shrink-0"><div class="bebas" style="font-size:1.1rem;color:var(--text)">${sp} ₴</div><div class="text-[9px] font-bold" style="color:var(--green)">+${sp-p.drop} ₴</div></div>
+      <div class="text-right shrink-0"><div class="bebas" style="font-size:1.1rem;color:var(--text)">${sp} ₴</div><div class="text-[9px] font-bold" style="color:var(--green)">+${sp-p.drop} ₴</div><div class="dropper-price text-[9px] font-black" style="color:var(--accent);">${p.drop} ₴ закуп</div></div>
       <button onclick="event.stopPropagation();addToCart('${safeId(p.id)}')" class="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm shrink-0" style="background:var(--text)"><i class="fa-solid fa-plus"></i></button>
     </div>`;}).join('');
     return;
@@ -1643,7 +1789,11 @@ function renderGrid(list,q=''){
       </div>
       <h3 class="text-[10px] font-bold leading-tight mb-2 uppercase line-clamp-2" style="color:var(--text);min-height:2.2rem;">${highlightText(p.nameUa,q)}</h3>
       <div class="mt-auto flex justify-between items-center pt-2" style="border-top:1px solid var(--border);" onclick="event.stopPropagation()">
-        <div><div class="bebas" style="font-size:1.1rem;color:var(--text);">${sp} ₴</div><div class="text-[9px] font-bold" style="color:var(--green);">+${prof} ₴</div></div>
+        <div>
+          <div class="bebas" style="font-size:1.1rem;color:var(--text);">${sp} ₴</div>
+          <div class="text-[9px] font-bold" style="color:var(--green);">+${prof} ₴</div>
+          <div class="dropper-price text-[9px] font-black" style="color:var(--accent);">закуп ${p.drop} ₴</div>
+        </div>
         <button onclick="addToCart('${safeId(p.id)}')" class="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm hover:opacity-80 active:scale-90" style="background:var(--text);"><i class="fa-solid fa-plus"></i></button>
       </div></div>`;
   }).join('');
@@ -1735,25 +1885,37 @@ function updateCartUI(){
         <div class="rounded-lg p-2 text-center" style="background:var(--surface2);"><div class="sec-title mb-1">Кількість</div><div class="flex items-center justify-center gap-2 mt-1"><button onclick="updateCount('${p.id}',-1)" class="w-6 h-6 rounded-md text-xs font-black" style="background:var(--border);color:var(--text);">−</button><span class="text-sm font-black" style="color:var(--text);">${p.count}</span><button onclick="updateCount('${p.id}',1)" class="w-6 h-6 rounded-md text-xs font-black" style="background:var(--border);color:var(--text);">+</button></div></div>
       </div>
       <div class="mt-1.5 text-right text-[9px] font-black" style="color:${pc};">${pP>=0?'+':''}${pP} ₴ прибуток · разом ${pT} ₴</div></div>`;}).join('');
-  const cnt=cart.reduce((s,i)=>s+i.count,0);const cc=document.getElementById('cartCount');cc.textContent=cnt;cc.classList.toggle('hidden',cnt===0);cc.classList.toggle('flex',cnt>0);
+  const cnt=cart.reduce((s,i)=>s+i.count,0);const cc=document.getElementById('cartCount');cc.textContent=cnt;cc.classList.toggle('hidden',cnt===0);cc.classList.toggle('flex',cnt>0);const mc=document.getElementById('mobileCartBadge');if(mc){mc.textContent=cnt;mc.style.display=cnt>0?'inline-flex':'none';}
   setText('cartCost',cost+' ₴');setText('cartTotal',total+' ₴');setText('cartProfit',(profit>=0?'+':'')+profit+' ₴');
 }
-function toggleCheckout(){checkoutOpen=!checkoutOpen;document.getElementById('checkoutForm').classList.toggle('open',checkoutOpen);document.getElementById('checkoutToggleBtn').innerHTML=checkoutOpen?'<i class="fa-solid fa-xmark mr-1"></i> Закрити форму':'<i class="fa-solid fa-clipboard-list mr-1"></i> Оформити замовлення';}
+function toggleCheckout(){checkoutOpen=!checkoutOpen;document.getElementById('checkoutForm').classList.toggle('open',checkoutOpen);document.getElementById('checkoutToggleBtn').innerHTML=checkoutOpen?'<i class="fa-solid fa-xmark mr-1"></i> Закрити форму':'<i class="fa-solid fa-clipboard-list mr-1"></i> Оформити замовлення';if(checkoutOpen&&_supaProfile){const n=document.getElementById('clientName');const p=document.getElementById('clientPhone');if(n&&!n.value)n.value=_supaProfile.name||'';if(p&&!p.value)p.value=_supaProfile.phone||'';}}
 
 // ═══ SUBMIT ORDER (збережено) ═══
 async function submitOrder(){
   if(!cart.length){showToast('⚠️ Кошик порожній!');return;}
-  const droperCode=document.getElementById('droperCode').value.trim();
-  // Перевірка коду дропера прихована (поле сховано). Логіку лишаємо —
-  // якщо колись знадобиться, поверни блок нижче й розкрий поле в HTML:
-  // if(!droperCode){showToast('⚠️ Введіть код дропера');return;}
-  const orderData={action:'addOrder',droperCode,clientName:document.getElementById('clientName').value.trim(),phone:document.getElementById('clientPhone').value.trim(),city:document.getElementById('clientCity').value.trim(),payment:document.getElementById('paymentType').value,comment:document.getElementById('clientComment').value.trim(),items:cart.map(p=>({id:p.id,name:p.name,count:p.count,price:p.price,salePrice:p.salePrice}))};
-  safeSetRaw('ypricea_droper_code',droperCode);
+  const orderData={action:'addOrder',clientName:document.getElementById('clientName').value.trim(),phone:document.getElementById('clientPhone').value.trim(),city:document.getElementById('clientCity').value.trim(),payment:document.getElementById('paymentType').value,comment:document.getElementById('clientComment').value.trim(),items:cart.map(p=>({id:p.id,name:p.name,count:p.count,price:p.price,salePrice:p.salePrice}))};
   // Сповіщення в Telegram + email одразу з браузера (не блокує основний потік)
   notifyOrder(orderData);
   try{
     const res=await fetch(APPS_SCRIPT_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(orderData)}).then(r=>r.json());
-    if(res.ok&&res.orderNum){showOrderSuccess(res.orderNum);cart=[];saveCart();updateCartUI();['clientName','clientPhone','clientCity','clientComment'].forEach(id=>document.getElementById(id).value='');}
+    if(res.ok&&res.orderNum){
+      showOrderSuccess(res.orderNum);
+      // Зберегти замовлення в Supabase якщо юзер авторизований
+      if(_supaUser&&supa()){
+        const items=cart.map(p=>({id:p.id,name:p.name,count:p.count,price:p.price,salePrice:p.salePrice}));
+        supa().from('orders').insert({
+          user_id:_supaUser.id,
+          droper_code:_supaProfile?.store_name||_supaProfile?.name||_supaUser.email||null,
+          client_name:orderData.clientName,client_phone:orderData.phone,
+          client_city:orderData.city,payment_type:orderData.payment,
+          comment:orderData.comment,
+          items,
+          total_sell:Math.round(items.reduce((s,it)=>s+(it.salePrice||0)*(it.count||1),0)*100)/100,
+          total_drop:Math.round(items.reduce((s,it)=>s+(it.price||0)*(it.count||1),0)*100)/100
+        }).then(({error})=>{if(error)console.warn('Supabase order:',error.message);});
+      }
+      cart=[];saveCart();updateCartUI();['clientName','clientPhone','clientCity','clientComment'].forEach(id=>document.getElementById(id).value='');
+    }
     else showToast('⚠️ '+(res.error||'Помилка'));
   }catch(e){showToast("⚠️ Помилка з'єднання");}
 }
@@ -1781,7 +1943,6 @@ function notifyOrder(orderData){
       +`📞 Телефон: *${orderData.phone||'—'}*\n`
       +`🏙 Місто: ${orderData.city||'не вказано'}\n`
       +`💳 Оплата: ${orderData.payment||'—'}\n`
-      +(orderData.droperCode?`🔑 Код дропера: ${orderData.droperCode}\n`:'')
       +`━━━━━━━━━━━━━━━━━━━━\n`
       +`📦 *Товари:${lines||' —'}*\n`
       +`━━━━━━━━━━━━━━━━━━━━\n`
@@ -1806,7 +1967,6 @@ function notifyOrder(orderData){
     body.set('Телефон',orderData.phone||'');
     body.set('Місто',orderData.city||'не вказано');
     body.set('Оплата',orderData.payment||'');
-    if(orderData.droperCode)body.set('Код дропера',orderData.droperCode);
     body.set('Товари',items.map(it=>`${it.name} ×${it.qty} = ${fmt((it.sell||0)*(it.qty||1))} ₴`).join('\n')||'не вказані');
     body.set('Сума',fmt(Math.round(total))+' ₴');
     if(orderData.comment)body.set('Коментар',orderData.comment);
@@ -2283,6 +2443,7 @@ function applyRecipeFromURL(){
 // ═══ UI HELPERS ═══
 function toggleAside(s){document.getElementById('sidePanel').classList.toggle('aside-open',s);document.getElementById('asideOverlay').classList.toggle('hidden',!s);}
 function toggleCart(s){document.getElementById('cartSidebar').classList.toggle('cart-open',s);document.getElementById('cartOverlay').classList.toggle('hidden',!s);}
+function focusMobileSearch(){const el=document.getElementById('searchInput');if(!el)return;el.scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>el.focus(),300);}
 document.getElementById('productModal').addEventListener('click',function(e){if(e.target===this)closeModal();});
 document.getElementById('contactModal').addEventListener('click',function(e){if(e.target===this)closeContact();});
 document.addEventListener('keydown',e=>{
@@ -2293,8 +2454,6 @@ document.addEventListener('keydown',e=>{
 });
 ['galTrack'].forEach(id=>{let sx=0,sy=0;const el=document.getElementById(id);el.addEventListener('touchstart',e=>{sx=e.changedTouches[0].clientX;sy=e.changedTouches[0].clientY;},{passive:true});el.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;if(Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>40)galMove(dx<0?1:-1);},{passive:true});});
 (function(){let sx=0;const el=document.getElementById('pvTrack');el.addEventListener('touchstart',e=>{sx=e.changedTouches[0].clientX;},{passive:true});el.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-sx;if(Math.abs(dx)>40)pvMove(dx<0?1:-1);},{passive:true});})();
-(function(){const s=safeRaw('ypricea_droper_code');if(s){const el=document.getElementById('droperCode');if(el)el.value=s;}})();
-
 // після завантаження даних — порахувати leafSet (лише ЯВШОКЕ-категорії)
 function recomputeLeafSet(){
   const m=srcCatMaps('yavshoke');
@@ -2820,6 +2979,108 @@ async function saveMappingToGitHub(){
     btn.disabled=false;btn.innerHTML='<i class="fa-brands fa-github"></i> Зберегти на GitHub';
     showToast('⚠️ '+e.message);
   }
+}
+
+// ═══════════════ SUPABASE AUTH ═══════════════
+async function initSupabaseAuth(){
+  const db=supa(); if(!db)return;
+  const {data:{session}}=await db.auth.getSession();
+  _supaUser=session?.user||null;
+  if(_supaUser) await _loadSupaProfile();
+  _refreshAuthNavUI();
+  db.auth.onAuthStateChange(async(event,session)=>{
+    _supaUser=session?.user||null;
+    if(_supaUser&&event==='SIGNED_IN') await _loadSupaProfile();
+    else if(!_supaUser) _supaProfile=null;
+    _refreshAuthNavUI();
+  });
+}
+
+async function _loadSupaProfile(){
+  const db=supa(); if(!db||!_supaUser)return;
+  const {data}=await db.from('profiles').select('*').eq('id',_supaUser.id).single();
+  _supaProfile=data;
+}
+
+function _refreshAuthNavUI(){
+  const isDropper=!!(_supaUser&&_supaProfile?.status==='active');
+  const isAdmin=!!(_supaUser&&_supaProfile?.role==='admin');
+  document.body.classList.toggle('dropper-mode',isDropper);
+  document.body.classList.toggle('admin-mode',isAdmin);
+  const btn=document.getElementById('authNavBtn');
+  const dot=document.getElementById('authNavDot');
+  if(!btn)return;
+  const mobBtn=document.getElementById('mobileAuthBtn');
+  const mobDot=document.getElementById('mobileAuthDot');
+  const mobLabel=document.getElementById('mobileAuthLabel');
+  if(_supaUser&&_supaProfile){
+    const ini=(_supaProfile.name||_supaUser.email||'?').charAt(0).toUpperCase();
+    btn.title=(_supaProfile.name||_supaUser.email)+' → Кабінет';
+    btn.innerHTML=`<span style="font-size:.7rem;font-weight:900;line-height:1;">${ini}</span>`;
+    btn.style.background='var(--accent)';
+    btn.style.color='#fff';
+    btn.style.border='none';
+    if(dot)dot.classList.remove('hidden');
+    if(mobBtn)mobBtn.classList.add('auth-active');
+    if(mobDot)mobDot.style.display='block';
+    if(mobLabel)mobLabel.textContent=ini;
+  }else{
+    btn.innerHTML='<i class="fa-solid fa-user text-sm"></i>';
+    btn.title='Кабінет / Увійти';
+    btn.style.background='var(--surface2)';
+    btn.style.color='var(--text2)';
+    btn.style.border='1px solid var(--border)';
+    if(dot)dot.classList.add('hidden');
+    if(mobBtn)mobBtn.classList.remove('auth-active');
+    if(mobDot)mobDot.style.display='none';
+    if(mobLabel)mobLabel.textContent='Кабінет';
+  }
+}
+
+function openAuthOrCabinet(){
+  if(_supaUser){window.location.href='cabinet.html';return;}
+  if(!supa()){showToast('⚠️ Supabase не підключено — заповни SUPA_URL і SUPA_ANON в index.html');return;}
+  document.getElementById('authModal').style.display='flex';
+  selectAuthTab('login');
+}
+function closeAuthModal(){document.getElementById('authModal').style.display='none';}
+function selectAuthTab(tab){
+  ['login','register'].forEach(t=>{
+    document.getElementById('authTab-'+t).classList.toggle('active',t===tab);
+    document.getElementById('authPanel-'+t).style.display=t===tab?'block':'none';
+  });
+}
+
+async function doLogin(){
+  const db=supa(); if(!db)return;
+  const email=document.getElementById('authEmail').value.trim();
+  const pass=document.getElementById('authPass').value;
+  if(!email||!pass){showToast('⚠️ Введіть email і пароль');return;}
+  const btn=document.getElementById('loginBtn');
+  btn.disabled=true;btn.textContent='Завантаження...';
+  const {error}=await db.auth.signInWithPassword({email,password:pass});
+  btn.disabled=false;btn.textContent='Увійти';
+  if(error){showToast('⚠️ '+error.message);return;}
+  closeAuthModal();
+  showToast('👋 Ласкаво просимо!');
+  setTimeout(()=>window.location.href='cabinet.html',900);
+}
+
+async function doRegister(){
+  const db=supa(); if(!db)return;
+  const name=document.getElementById('regName').value.trim();
+  const email=document.getElementById('regEmail').value.trim();
+  const pass=document.getElementById('regPass').value;
+  const store=document.getElementById('regStore').value.trim();
+  if(!name||!email||!pass){showToast('⚠️ Введіть імʼя, email і пароль');return;}
+  const btn=document.getElementById('registerBtn');
+  btn.disabled=true;btn.textContent='Реєстрація...';
+  const {error}=await db.auth.signUp({email,password:pass,options:{data:{name,store_name:store}}});
+  btn.disabled=false;btn.textContent='Зареєструватись';
+  if(error){showToast('⚠️ '+error.message);return;}
+  closeAuthModal();
+  showToast('✅ Зареєстровано! Ласкаво просимо!');
+  setTimeout(()=>window.location.href='cabinet.html',900);
 }
 
 init();
