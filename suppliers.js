@@ -16,7 +16,8 @@
 
    Префікси categoryId беруться з masterevaxml.py:
      1111 → shkatulka, 2222 → opt-drop, 3333 → lugi,
-     4444 → dropom, 5555 → royaltoys, без префіксу → kievopt
+     4444 → dropom, 5555 → royaltoys, без префіксу → kievopt,
+     7777 → posudograd, 8888 → i-posud, 9999 → websklad
    ═══════════════════════════════════════════════════════════════ */
 (function (global) {
   'use strict';
@@ -31,14 +32,17 @@
     text: '#0369a1',
   };
 
-  // ── MASTEREVA: 6 джерел. prefix — початок categoryId. ──
+  // ── MASTEREVA: 9 джерел. prefix — початок categoryId. ──
   // Порядок важливий: довші/специфічніші префікси перевіряємо першими.
   var MASTEREVA_SUPPLIERS = [
-    { key: 'ev_shkatulka', prefix: '1111', label: 'Mastereva · Shkatulka', short: 'SH', color: '#f59e0b', bg: '#fef3c7', text: '#b45309' },
-    { key: 'ev_optdrop',   prefix: '2222', label: 'Mastereva · Opt-Drop',  short: 'OD', color: '#8b5cf6', bg: '#ede9fe', text: '#6d28d9' },
-    { key: 'ev_lugi',      prefix: '3333', label: 'Mastereva · Lugi',      short: 'LU', color: '#ec4899', bg: '#fce7f3', text: '#be185d' },
-    { key: 'ev_dropom',    prefix: '4444', label: 'Mastereva · Dropom',    short: 'DR', color: '#10b981', bg: '#d1fae5', text: '#047857' },
-    { key: 'ev_royaltoys', prefix: '5555', label: 'Mastereva · RoyalToys', short: 'RT', color: '#ef4444', bg: '#fee2e2', text: '#b91c1c' },
+    { key: 'ev_shkatulka',  prefix: '1111', label: 'Mastereva · Shkatulka',  short: 'SH', color: '#f59e0b', bg: '#fef3c7', text: '#b45309' },
+    { key: 'ev_optdrop',    prefix: '2222', label: 'Mastereva · Opt-Drop',   short: 'OD', color: '#8b5cf6', bg: '#ede9fe', text: '#6d28d9' },
+    { key: 'ev_lugi',       prefix: '3333', label: 'Mastereva · Lugi',       short: 'LU', color: '#ec4899', bg: '#fce7f3', text: '#be185d' },
+    { key: 'ev_dropom',     prefix: '4444', label: 'Mastereva · Dropom',     short: 'DR', color: '#10b981', bg: '#d1fae5', text: '#047857' },
+    { key: 'ev_royaltoys',  prefix: '5555', label: 'Mastereva · RoyalToys',  short: 'RT', color: '#ef4444', bg: '#fee2e2', text: '#b91c1c' },
+    { key: 'ev_posudograd', prefix: '7777', label: 'Mastereva · Posudograd', short: 'PS', color: '#f97316', bg: '#fff7ed', text: '#9a3412' },
+    { key: 'ev_iposud',     prefix: '8888', label: 'Mastereva · i-Posud',    short: 'IP', color: '#06b6d4', bg: '#ecfeff', text: '#164e63' },
+    { key: 'ev_websklad',   prefix: '9999', label: 'Mastereva · Websklad',   short: 'WS', color: '#6366f1', bg: '#eef2ff', text: '#3730a3' },
   ];
 
   // kievopt — без префіксу категорії (фолбек для Mastereva-товарів,
