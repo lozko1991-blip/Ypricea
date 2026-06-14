@@ -42,7 +42,7 @@
     { key: 'ev_royaltoys',  prefix: '5555', label: 'Mastereva · RoyalToys',  short: 'RT', color: '#ef4444', bg: '#fee2e2', text: '#b91c1c' },
     { key: 'ev_posudograd', prefix: '7777', label: 'Mastereva · Posudograd', short: 'PS', color: '#f97316', bg: '#fff7ed', text: '#9a3412' },
     { key: 'ev_iposud',     prefix: '8888', label: 'Mastereva · i-Posud',    short: 'IP', color: '#06b6d4', bg: '#ecfeff', text: '#164e63' },
-    { key: 'ev_websklad',   prefix: '9999', label: 'Mastereva · Websklad',   short: 'WS', color: '#6366f1', bg: '#eef2ff', text: '#3730a3' },
+    { key: 'ev_websklad',   prefix: '99',   label: 'Mastereva · Websklad',   short: 'WS', color: '#6366f1', bg: '#eef2ff', text: '#3730a3' },
   ];
 
   // kievopt — без префіксу категорії (фолбек для Mastereva-товарів,
