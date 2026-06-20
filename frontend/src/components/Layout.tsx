@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { LogOut, User, LayoutDashboard, Search } from 'lucide-react';
 
 export default function Layout() {
-  const { user, profile, signOut } = useAuth();
+  const { user, signOut } = useAuth();
 
   return (
     <div className="min-h-screen bg-[var(--bg)] flex flex-col">

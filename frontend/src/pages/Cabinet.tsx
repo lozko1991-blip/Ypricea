@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
 export default function Cabinet() {
-  const { session } = useAuth();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'orders' | 'profile' | 'admin'>('orders');
 
   const handleSignOut = async () => {
@@ -17,7 +17,7 @@ export default function Cabinet() {
         <div>
           <h1 className="text-2xl font-extrabold mb-1">Особистий кабінет</h1>
           <p className="text-[var(--text2)] text-sm font-medium">
-            Вітаємо, {session?.user?.email}
+            Вітаємо, {user?.email}
           </p>
         </div>
         <button onClick={handleSignOut} className="btn-secondary text-red-500 hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-950/30">
@@ -65,7 +65,7 @@ export default function Cabinet() {
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-[var(--text2)] uppercase tracking-wider mb-1">Email</label>
-                <input type="text" value={session?.user?.email || ''} readOnly className="input-field w-full opacity-70 cursor-not-allowed" />
+                <input type="text" value={user?.email || ''} readOnly className="input-field w-full opacity-70 cursor-not-allowed" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-[var(--text2)] uppercase tracking-wider mb-1">Telegram / Viber</label>
