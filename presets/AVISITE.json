@@ -1,5 +1,5 @@
 {
-  "name": "export-1",
+  "name": "AVISITE",
   "cats": [
     "14881",
     "13071",
@@ -164,6 +164,6 @@
   ],
   "pct": 0,
   "grn": 0,
-  "min": 400,
+  "min": 300,
   "avail": true
 }
