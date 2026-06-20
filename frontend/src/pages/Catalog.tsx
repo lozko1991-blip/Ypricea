@@ -730,7 +730,7 @@ export default function Catalog() {
                         <h3 className="font-extrabold text-xs leading-snug line-clamp-2 mb-2 group-hover:text-[var(--accent)] transition-colors">
                           {p.n}
                         </h3>
-                        <div className="mt-auto flex items-end justify-between pt-1">
+                        <div className="mt-auto flex flex-wrap items-end justify-between gap-1 pt-1">
                           <div>
                             <span className="sec-title block mb-0.5">Опт ціна</span>
                             <span className="font-black text-base text-[var(--text)]">{p.pr} ₴</span>
@@ -947,7 +947,7 @@ export default function Catalog() {
                 </div>
 
                 {/* Tabs content container */}
-                <div className="flex-1 overflow-y-auto text-xs leading-relaxed pr-1 noscroll max-h-72 md:max-h-none">
+                <div className="flex-1 md:overflow-y-auto text-xs leading-relaxed pr-1 noscroll md:max-h-none overflow-visible">
                   {detailsLoading ? (
                     <div className="flex items-center justify-center py-10 text-[var(--text2)]">
                       <Loader2 className="animate-spin mr-2" size={16} />

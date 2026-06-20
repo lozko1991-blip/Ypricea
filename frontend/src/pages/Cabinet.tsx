@@ -626,7 +626,18 @@ export default function Cabinet() {
   };
 
   // Compile XML string inside the browser
-  const buildPromXmlText = (offers: any[], catById: Record<string, any>, pfxCats: Map<string, string>, title: string) => {
+  const buildPromXmlText = (
+    offers: any[], 
+    catById: Record<string, any>, 
+    pfxCats: Map<string, string>, 
+    title: string,
+    type: 'yavshoke' | 'mastereva'
+  ) => {
+    const idPrefix = type === 'yavshoke' ? yavIdPrefix : meIdPrefix;
+    const fillParams = type === 'yavshoke' ? yavFillParams : meFillParams;
+    const addBrand = type === 'yavshoke' ? yavAddBrand : meAddBrand;
+    const defaultBrand = type === 'yavshoke' ? yavDefaultBrand : meDefaultBrand;
+
     // Categories section
     let catsXml = '';
     pfxCats.forEach((pfxVal, key) => {
@@ -641,13 +652,13 @@ export default function Cabinet() {
     let x = `<?xml version="1.0" encoding="UTF-8"?>\n<yml_catalog date="${dateStr}">\n<shop>\n<name>${title}</name>\n<company>UTRADE</company>\n<url>${siteUrl}/</url>\n<currencies><currency id="UAH" rate="1"/></currencies>\n<categories>${catsXml}</categories>\n<offers>\n`;
 
     offers.forEach(o => {
-      const offerId = (yavIdPrefix || meIdPrefix) + String(o.id);
+      const offerId = idPrefix + String(o.id);
       const catId = pfxCats.get(String(o.c)) || String(o.c);
-      const groupId = o.groupId ? ((yavIdPrefix || meIdPrefix) + String(o.groupId)) : null;
+      const groupId = o.groupId ? (idPrefix + String(o.groupId)) : null;
       let params = o.params || [];
-      if (yavFillParams || meFillParams) params = fillDefaultParams(params);
+      if (fillParams) params = fillDefaultParams(params);
 
-      const brand = (yavAddBrand || meAddBrand) ? getProductBrand(o, yavDefaultBrand || meDefaultBrand) : '';
+      const brand = addBrand ? getProductBrand(o, defaultBrand) : '';
       const nameRu = brand ? withBrand(o.descRu || o.n, brand) : (o.descRu || o.n);
       const nameUa = brand ? withBrand(o.descUa || o.n, brand) : (o.descUa || o.n);
 
@@ -761,7 +772,7 @@ export default function Cabinet() {
       // 4. Build XML text
       setGeneratorStatus('Компіляція XML...');
       const title = type === 'yavshoke' ? 'UTRADE Yavshoke' : 'UTRADE Mastereva';
-      const xmlContent = buildPromXmlText(offers, catById, pfxCats, title);
+      const xmlContent = buildPromXmlText(offers, catById, pfxCats, title, type);
 
       // Download file
       const blob = new Blob([xmlContent], { type: 'application/xml;charset=utf-8' });
