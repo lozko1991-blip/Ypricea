@@ -26,7 +26,7 @@ export default function Catalog() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch('/data/index.json');
+        const res = await fetch(`${import.meta.env.BASE_URL}data/index.json`);
         if (res.ok) {
           const json = await res.json();
           setData(json);
