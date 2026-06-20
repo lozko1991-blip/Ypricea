@@ -307,7 +307,7 @@ export default function Cabinet() {
       a.download = filename;
       a.click();
       
-      setTimeout(() => URL.createObjectURL(blob), 2000);
+      setTimeout(() => URL.revokeObjectURL(downloadUrl), 2000);
       showToast('✅ Готово: ' + filename);
     } catch (e: any) {
       showToast('⚠️ Помилка: ' + e.message);
@@ -770,6 +770,7 @@ export default function Cabinet() {
       a.href = downloadUrl;
       a.download = `${type}_export_${new Date().toISOString().slice(0, 10)}.xml`;
       a.click();
+      setTimeout(() => URL.revokeObjectURL(downloadUrl), 2000);
 
       showToast(`✅ Успішно завантажено: ${offers.length} товарів!`);
     } catch (e: any) {
