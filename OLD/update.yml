@@ -6,9 +6,9 @@ on:
   workflow_dispatch: {}      # ручний запуск кнопкою
   push:
     branches: [ main ]
-    paths:
-      - 'process.mjs'
-      - 'frontend/**'
+    paths:                   # html/assets НЕ тригерять повний rebuild
+      - 'scripts/**'
+      - 'presets/**'
       - '.github/workflows/update.yml'
 
 permissions:
@@ -35,34 +35,35 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install root deps
+      - name: Install deps
         run: npm install --no-audit --no-fund
 
-      - name: Fetch and Process Data
+      - name: Build catalog (fetch + process)
         run: node process.mjs
 
-      - name: Build React Frontend
+      - name: Copy static files
         run: |
-          cd frontend
-          npm install --no-audit --no-fund
-          npm run build
+          cp index.html site/index.html
+          [ -f cabinet.html ] && cp cabinet.html site/cabinet.html || true
+          mkdir -p site/assets
+          cp -r assets/* site/assets/
 
-      - name: Delete old cache
+      - name: Delete old cache (щоб не накопичувалось)
         run: |
           gh cache delete site-build-latest --repo ${{ github.repository }} 2>/dev/null || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Save build to cache
+      - name: Save site/ to cache
         uses: actions/cache/save@v4
         with:
-          path: frontend/dist
+          path: site
           key: site-build-latest
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: frontend/dist
+          path: site
 
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4

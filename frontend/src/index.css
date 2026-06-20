@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg: #f0f4f8;
+    --surface: #fff;
+    --surface2: #f7f9fc;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --text2: #64748b;
+    --accent: #2563eb;
+    --green: #10b981;
+    --red: #ef4444;
+  }
+  
+  [data-theme='dark'] {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #0d1117;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --accent: #58a6ff;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-[var(--border)];
+  }
+  body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: 'Manrope', sans-serif;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5;
+  }
+  .gbtn {
+    @apply inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold cursor-pointer border-none transition-opacity hover:opacity-85 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 text-[0.65rem] font-bold px-2.5 py-1 rounded-full;
+  }
+  .sec-title {
+    @apply text-[0.65rem] font-extrabold tracking-widest uppercase text-[var(--text2)];
+  }
+  .input-field {
+    @apply bg-[var(--surface2)] text-[var(--text)] border border-[var(--border)] rounded-xl font-sans transition-colors focus:outline-none focus:border-[var(--accent)] px-3 py-2;
+  }
+}

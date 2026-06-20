@@ -17,7 +17,7 @@ const CONFIG = {
   MARKUP_PCT: 20,       // дефолт націнки % (НЕ застосовується в базі; лише підказка для пресетів)
   MARKUP_GRN: 70,       // дефолт націнки грн (НЕ застосовується в базі; рахується при генерації)
   MIN_CAT_PRODUCTS: 5,  // листову категорію з < 5 (тобто ≤4) товарів — видалити
-  OUT_DIR: 'site',      // куди писати сайт+дані (звідси деплоїться Pages)
+  OUT_DIR: 'frontend/public',      // куди писати сайт+дані (звідси деплоїться Pages)
   IMG_PREFIX: 'https://crm.yavshoke.ua/media/shop//', // спільний префікс фото
   SITE_URL: 'https://lozko1991-blip.github.io/Ypricea',
 
@@ -40,11 +40,16 @@ const CONFIG = {
   MASTEREVA_MIN_PRICE: 0,
   // Префікси categoryId → ключ постачальника (узгоджено з assets/suppliers.js)
   MASTEREVA_PREFIXES: [
+    { prefix: '1000', src: 'ev_dropt' },
+    { prefix: '1100', src: 'ev_forus' },
     { prefix: '1111', src: 'ev_shkatulka' },
     { prefix: '2222', src: 'ev_optdrop' },
     { prefix: '3333', src: 'ev_lugi' },
     { prefix: '4444', src: 'ev_dropom' },
     { prefix: '5555', src: 'ev_royaltoys' },
+    { prefix: '7777', src: 'ev_posudograd' },
+    { prefix: '8888', src: 'ev_iposud' },
+    { prefix: '9999', src: 'ev_websklad' },
   ],
   MASTEREVA_DEFAULT_SRC: 'ev_kievopt',
   // Описи Mastereva потрапляють у desc-шарди (а не в основний індекс),

@@ -3,3 +3,5 @@
 *.env
 .claudeprompt
 node_modules/
+frontend/public/data/
+frontend/public/exports/
