@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Link, Outlet } from 'react-router-dom';
+import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
+import { useSearch } from '../contexts/SearchContext';
 import { 
   LogOut, 
   User, 
@@ -34,6 +35,9 @@ export default function Layout() {
     updateSalePrice, 
     submitOrder 
   } = useCart();
+  const { searchTerm, setSearchTerm } = useSearch();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const [isContactsOpen, setIsContactsOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
@@ -100,15 +104,42 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-[var(--bg)] flex flex-col">
       <header className="sticky top-0 z-50 bg-[var(--surface)] border-b border-[var(--border)] px-4 py-3 shadow-sm">
-        <div className="max-w-[1700px] mx-auto flex items-center justify-between">
-          <Link to="/" className="text-xl font-extrabold tracking-tighter text-[var(--text)] flex items-center gap-2">
+        <div className="max-w-[1700px] mx-auto flex flex-wrap items-center justify-between gap-y-3">
+          <Link to="/" className="text-xl font-extrabold tracking-tighter text-[var(--text)] flex items-center gap-2 order-1">
             <span className="w-8 h-8 rounded-xl bg-gradient-to-br from-[var(--accent)] to-blue-400 flex items-center justify-center text-white text-sm font-extrabold">
               U
             </span>
             UTRADE
           </Link>
 
-          <nav className="flex items-center gap-2 sm:gap-3">
+          {/* Responsive Wide Search Bar */}
+          <div className="order-3 w-full md:order-2 md:flex-1 md:max-w-md lg:max-w-lg xl:max-w-xl md:mx-4 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text2)]" size={16} />
+            <input
+              type="text"
+              placeholder="Пошук товарів (розумний пошук)..."
+              className="input-field w-full pl-9 pr-9 py-2 text-sm"
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                if (location.pathname !== '/') {
+                  navigate('/');
+                }
+              }}
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text2)] hover:text-[var(--text)]"
+                type="button"
+                title="Очистити пошук"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+
+          <nav className="flex items-center gap-2 sm:gap-3 order-2">
             {/* Desktop Company Info / Contacts */}
             <button 
               onClick={() => setIsAboutOpen(true)}
@@ -137,10 +168,6 @@ export default function Layout() {
             </a>
 
             <div className="hidden lg:block h-6 w-px bg-[var(--border)] mx-1" />
-
-            <Link to="/" className="gbtn bg-[var(--surface2)] text-[var(--text)] hover:bg-[var(--border)]">
-              <Search size={16} /> <span className="hidden sm:inline">Каталог</span>
-            </Link>
 
             {/* Shopping Cart Button */}
             <button 

@@ -24,6 +24,7 @@ import {
   mapGet 
 } from '../lib/dataLoader';
 import { useCart } from '../contexts/CartContext';
+import { useSearch } from '../contexts/SearchContext';
 
 interface CatalogProduct {
   id: string;
@@ -133,7 +134,7 @@ export default function Catalog() {
   const [loading, setLoading] = useState(true);
   
   // Filtering States
-  const [searchTerm, setSearchTerm] = useState('');
+  const { searchTerm, setSearchTerm } = useSearch();
   const [selectedSupplier, setSelectedSupplier] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -236,6 +237,11 @@ export default function Catalog() {
 
     fetchDetails();
   }, [selectedProduct, data]);
+
+  // Reset page when search term changes from header or local input
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   // Reset page when filters change
   const handleSelectSupplier = (key: string) => {
