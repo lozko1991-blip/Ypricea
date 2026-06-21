@@ -8,7 +8,8 @@ import {
   ChevronLeft, 
   X, 
   Copy, 
-  Filter 
+  Filter,
+  Plus
 } from 'lucide-react';
 import { 
   getSupplierInfo, 
@@ -22,6 +23,7 @@ import {
   loadDescShard, 
   mapGet 
 } from '../lib/dataLoader';
+import { useCart } from '../contexts/CartContext';
 
 interface CatalogProduct {
   id: string;
@@ -125,6 +127,7 @@ function matchProduct(p: CatalogProduct, tokens: SearchToken[]): boolean {
 }
 
 export default function Catalog() {
+  const { addToCart } = useCart();
   const [data, setData] = useState<IndexData | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -823,26 +826,39 @@ export default function Catalog() {
                             <span className="sec-title block mb-0.5">Опт ціна</span>
                             <span className="font-black text-base text-[var(--text)]">{p.pr} ₴</span>
                           </div>
-                          {(() => {
-                            const supplier = getSupplierInfo(p.s);
-                            return (
-                              <span 
-                                className="badge shadow-sm" 
-                                style={{ 
-                                  backgroundColor: supplier.bg, 
-                                  color: supplier.text,
-                                  border: `1px solid ${supplier.color}30`
-                                }}
-                                title={supplier.label}
-                              >
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {(() => {
+                              const supplier = getSupplierInfo(p.s);
+                              return (
                                 <span 
-                                  className="inline-block w-1.5 h-1.5 rounded-full mr-0.5" 
-                                  style={{ backgroundColor: supplier.color }}
-                                />
-                                {supplier.short}
-                              </span>
-                            );
-                          })()}
+                                  className="badge shadow-sm" 
+                                  style={{ 
+                                    backgroundColor: supplier.bg, 
+                                    color: supplier.text,
+                                    border: `1px solid ${supplier.color}30`
+                                  }}
+                                  title={supplier.label}
+                                >
+                                  <span 
+                                    className="inline-block w-1.5 h-1.5 rounded-full mr-0.5" 
+                                    style={{ backgroundColor: supplier.color }}
+                                  />
+                                  {supplier.short}
+                                </span>
+                              );
+                            })()}
+                            
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                addToCart(p);
+                              }}
+                              className="w-7 h-7 rounded-xl bg-[var(--text)] text-[var(--surface)] hover:bg-[var(--accent)] hover:text-white transition-all flex items-center justify-center shadow-sm"
+                              title="Додати в кошик"
+                            >
+                              <Plus size={14} />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1085,6 +1101,16 @@ export default function Catalog() {
               >
                 <Copy size={14} />
                 {copied ? 'Скопійовано!' : 'Копіювати опис'}
+              </button>
+              <button 
+                onClick={() => {
+                  addToCart(selectedProduct);
+                  setSelectedProduct(null);
+                }}
+                className="gbtn bg-[var(--accent)] text-white shadow-md shadow-blue-500/20 text-xs active:scale-95 transition-all"
+              >
+                <Plus size={14} />
+                Додати в кошик
               </button>
               <button 
                 onClick={() => setSelectedProduct(null)}
