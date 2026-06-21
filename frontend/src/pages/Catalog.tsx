@@ -48,6 +48,82 @@ interface IndexData {
   products: CatalogProduct[];
 }
 
+// --- SMART SEARCH ENGINE ---
+const NC_MAP: Record<string, string> = { 'ё': 'е', 'ъ': '', 'і': 'и', 'ї': 'и', 'є': 'е' };
+function normalizeString(s: string): string {
+  return String(s || '').toLowerCase()
+    .replace(/[ёъіїє]/g, c => NC_MAP[c] || c)
+    .replace(/([бвгджзклмнпрстфхцчшщ])\1+/g, '$1');
+}
+
+const TRANS_MAP = 'а:a,б:b,в:v,г:g,д:d,е:e,ж:zh,з:z,и:i,й:y,к:k,л:l,м:m,н:n,о:o,п:p,р:r,с:s,т:t,у:u,ф:f,х:x,ц:ts,ч:ch,ш:sh,щ:sh,ь:,ю:yu,я:ya'
+  .split(',')
+  .reduce((m, pair) => {
+    const [k, v] = pair.split(':');
+    m[k] = v === undefined ? '' : v;
+    return m;
+  }, {} as Record<string, string>);
+
+function cyrillicToLatin(s: string): string {
+  return s.replace(/[а-яё]/g, c => TRANS_MAP[c] !== undefined ? TRANS_MAP[c] : c);
+}
+
+const BRAND_MAP: Record<string, string> = {
+  'найк': 'nike', 'нике': 'nike',
+  'адидас': 'adidas',
+  'пума': 'puma',
+  'рибок': 'reebok',
+  'нью баланс': 'new balance', 'нью беленс': 'new balance',
+  'фила': 'fila',
+  'конверс': 'converse',
+  'ванс': 'vans',
+  'асикс': 'asics',
+  'самсунг': 'samsung',
+  'сони': 'sony',
+  'хуавей': 'huawei', 'хуавеи': 'huawei',
+  'сяоми': 'xiaomi', 'ксяоми': 'xiaomi',
+  'аирподс': 'airpods',
+  'апл': 'apple', 'епл': 'apple'
+};
+
+interface SearchToken {
+  t: string;
+  brand: string | null;
+  lat: string | null;
+}
+
+function parseQuery(raw: string): SearchToken[] {
+  let q = normalizeString(raw);
+  for (const [k, v] of Object.entries(BRAND_MAP)) {
+    if (k.includes(' ') && q.includes(k)) {
+      q = q.split(k).join(v);
+    }
+  }
+  return q.split(/\s+/).filter(Boolean).map(t => {
+    const brand = BRAND_MAP[t] || null;
+    const lat = cyrillicToLatin(t);
+    return { t, brand, lat: lat !== t ? lat : null };
+  });
+}
+
+function buildProductSearchString(p: CatalogProduct): string {
+  const normName = normalizeString(p.n);
+  const normId = String(p.id).toLowerCase();
+  let s = normName + ' ' + normId;
+  const latName = cyrillicToLatin(normName);
+  if (latName !== normName) {
+    s += ' ' + latName;
+  }
+  return s;
+}
+
+function matchProduct(p: CatalogProduct, tokens: SearchToken[]): boolean {
+  const s = buildProductSearchString(p);
+  return tokens.every(({ t, brand, lat }) => {
+    return s.includes(t) || (brand && s.includes(brand)) || (lat && s.includes(lat));
+  });
+}
+
 export default function Catalog() {
   const [data, setData] = useState<IndexData | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -62,7 +138,7 @@ export default function Catalog() {
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 24;
+  const itemsPerPage = 30;
 
   // Responsive mobile drawer
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -349,6 +425,8 @@ export default function Catalog() {
   // Filtered Products List
   const filteredProducts = useMemo(() => {
     if (!data) return [];
+    const tokens = searchTerm.trim() ? parseQuery(searchTerm) : [];
+
     return data.products.filter(p => {
       // 1. Supplier filter
       if (selectedSupplier !== 'all' && p.s !== selectedSupplier) return false;
@@ -356,12 +434,9 @@ export default function Catalog() {
       // 2. Category filter
       if (activeBranchCategoryIds && !activeBranchCategoryIds.has(p.c)) return false;
       
-      // 3. Search text filter
-      if (searchTerm) {
-        const term = searchTerm.toLowerCase();
-        const nameMatch = p.n.toLowerCase().includes(term);
-        const idMatch = p.id.toLowerCase().includes(term);
-        if (!nameMatch && !idMatch) return false;
+      // 3. Smart Search text filter
+      if (tokens.length > 0) {
+        if (!matchProduct(p, tokens)) return false;
       }
       
       return true;
@@ -677,13 +752,26 @@ export default function Catalog() {
                 <input 
                   type="text" 
                   placeholder="Пошук товарів..." 
-                  className="input-field w-full pl-9 py-2 text-sm"
+                  className="input-field w-full pl-9 pr-9 py-2 text-sm"
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value);
                     setCurrentPage(1);
                   }}
                 />
+                {searchTerm && (
+                  <button
+                    onClick={() => {
+                      setSearchTerm('');
+                      setCurrentPage(1);
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text2)] hover:text-[var(--text)]"
+                    type="button"
+                    title="Очистити пошук"
+                  >
+                    <X size={16} />
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -695,7 +783,7 @@ export default function Catalog() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
                 {paginatedProducts.map(p => {
                   const imgUrl = p.i ? (p.i.startsWith('http') ? p.i : `${data?.imgPrefix || ''}${p.i}`) : '';
                   return (
