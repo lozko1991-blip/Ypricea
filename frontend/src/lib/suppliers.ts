@@ -35,6 +35,7 @@ export const MASTEREVA_SUPPLIERS: SupplierInfo[] = [
   { key: 'ev_royaltoys',  label: 'Mastereva · RoyalToys',  short: 'RT', color: '#ef4444', bg: '#fee2e2', text: '#b91c1c' },
   { key: 'ev_posudograd', label: 'Mastereva · Posudograd', short: 'PS', color: '#f97316', bg: '#fff7ed', text: '#9a3412' },
   { key: 'ev_iposud',     label: 'Mastereva · i-Posud',    short: 'IP', color: '#06b6d4', bg: '#ecfeff', text: '#164e63' },
+  { key: 'ev_iposud2',    label: 'Iposud2',                short: 'IP2', color: '#0891b2', bg: '#ecfeff', text: '#155e75' },
   { key: 'ev_websklad',   label: 'Mastereva · Websklad',   short: 'WS', color: '#6366f1', bg: '#eef2ff', text: '#3730a3' },
 ];
 
