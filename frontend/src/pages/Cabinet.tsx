@@ -115,25 +115,27 @@ export default function Cabinet() {
   }, []);
 
   // Fetch customer orders from Supabase
-  useEffect(() => {
-    if (user && activeTab === 'orders') {
-      const fetchOrders = async () => {
-        setOrdersLoading(true);
-        try {
-          const { data, error } = await supabase
-            .from('orders')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false });
+  const fetchOrders = async () => {
+    if (!user) return;
+    setOrdersLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
 
-          if (error) throw error;
-          setOrders(data as Order[]);
-        } catch (e: any) {
-          showToast('⚠️ Помилка завантаження замовлень: ' + e.message);
-        } finally {
-          setOrdersLoading(false);
-        }
-      };
+      if (error) throw error;
+      setOrders(data as Order[]);
+    } catch (e: any) {
+      showToast('⚠️ Помилка завантаження замовлень: ' + e.message);
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'orders') {
       fetchOrders();
     }
   }, [activeTab, user]);
