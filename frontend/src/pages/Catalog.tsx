@@ -35,6 +35,7 @@ interface CatalogProduct {
   i?: string; // image
   s: string; // source
   b?: string; // brand
+  v?: string; // vendorCode / SKU
 }
 
 interface Category {
@@ -94,6 +95,22 @@ interface SearchToken {
   t: string;
   brand: string | null;
   lat: string | null;
+  layout: string | null;
+}
+
+const EN_UA_LAYOUT: Record<string, string> = {
+  'q':'й','w':'ц','e':'у','r':'к','t':'е','y':'н','u':'г','i':'ш','o':'щ','p':'з','[':'х',']':'ї',
+  'a':'ф','s':'і','d':'в','f':'а','g':'п','h':'р','j':'о','k':'л','l':'д',';':'ж','\'':'є',
+  'z':'я','x':'ч','c':'с','v':'м','b':'и','n':'т','m':'ь',',':'б','.':'ю'
+};
+const UA_EN_LAYOUT: Record<string, string> = {};
+Object.entries(EN_UA_LAYOUT).forEach(([en, ua]) => { UA_EN_LAYOUT[ua] = en; });
+
+function translateLayout(str: string): string {
+  return str.split('').map(c => {
+    const lower = c.toLowerCase();
+    return EN_UA_LAYOUT[lower] || UA_EN_LAYOUT[lower] || c;
+  }).join('');
 }
 
 function parseQuery(raw: string): SearchToken[] {
@@ -106,7 +123,13 @@ function parseQuery(raw: string): SearchToken[] {
   return q.split(/\s+/).filter(Boolean).map(t => {
     const brand = BRAND_MAP[t] || null;
     const lat = cyrillicToLatin(t);
-    return { t, brand, lat: lat !== t ? lat : null };
+    const layout = translateLayout(t);
+    return { 
+      t, 
+      brand, 
+      lat: lat !== t ? lat : null,
+      layout: layout !== t ? layout : null
+    };
   });
 }
 
@@ -118,13 +141,18 @@ function buildProductSearchString(p: CatalogProduct): string {
   if (latName !== normName) {
     s += ' ' + latName;
   }
+  if (p.b) s += ' ' + normalizeString(p.b);
+  if (p.v) s += ' ' + normalizeString(p.v);
   return s;
 }
 
-function matchProduct(p: CatalogProduct, tokens: SearchToken[]): boolean {
-  const s = buildProductSearchString(p);
-  return tokens.every(({ t, brand, lat }) => {
-    return s.includes(t) || (brand && s.includes(brand)) || (lat && s.includes(lat));
+function matchProduct(p: CatalogProduct, tokens: SearchToken[], searchStrings: Map<string, string>): boolean {
+  const s = searchStrings.get(p.id) || '';
+  return tokens.every(({ t, brand, lat, layout }) => {
+    return s.includes(t) || 
+           (brand && s.includes(brand)) || 
+           (lat && s.includes(lat)) ||
+           (layout && s.includes(layout));
   });
 }
 
@@ -133,6 +161,16 @@ export default function Catalog() {
   const [data, setData] = useState<IndexData | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Pre-compiled search strings map for all products
+  const searchStrings = useMemo(() => {
+    const map = new Map<string, string>();
+    if (!data) return map;
+    data.products.forEach(p => {
+      map.set(p.id, buildProductSearchString(p));
+    });
+    return map;
+  }, [data]);
   
   // Filtering States
   const { searchTerm, setSearchTerm } = useSearch();
@@ -532,12 +570,12 @@ export default function Catalog() {
 
       // 5. Smart Search text filter
       if (tokens.length > 0) {
-        if (!matchProduct(p, tokens)) return false;
+        if (!matchProduct(p, tokens, searchStrings)) return false;
       }
       
       return true;
     });
-  }, [data, selectedSupplier, activeBranchCategoryIds, searchTerm, selectedBrand, minPrice, maxPrice]);
+  }, [data, selectedSupplier, activeBranchCategoryIds, searchTerm, selectedBrand, minPrice, maxPrice, searchStrings]);
 
   // Pagination Variables
   const totalProducts = filteredProducts.length;
