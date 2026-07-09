@@ -104,7 +104,7 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
   showToast
 }) => {
   // Sub-Tab Navigation for Admin view
-  const [adminActiveSubTab, setAdminActiveSubTab] = useState<'users' | 'analytics' | 'logs' | 'settings'>('users');
+  const [adminActiveSubTab, setAdminActiveSubTab] = useState<'users' | 'analytics' | 'logs' | 'settings' | 'catalog' | 'invoices'>('users');
 
   // Generator tree collapse sets
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -1006,6 +1006,26 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
               📋 Журнал Синхронізацій
             </button>
             <button 
+              onClick={() => setAdminActiveSubTab('catalog')} 
+              className={`px-4 py-2 font-black text-xs border-b-2 transition-all ${
+                adminActiveSubTab === 'catalog' 
+                  ? 'border-[var(--accent)] text-[var(--accent)]' 
+                  : 'border-transparent text-[var(--text2)] hover:text-[var(--text)]'
+              }`}
+            >
+              📦 Каталог та Склади
+            </button>
+            <button 
+              onClick={() => setAdminActiveSubTab('invoices')} 
+              className={`px-4 py-2 font-black text-xs border-b-2 transition-all ${
+                adminActiveSubTab === 'invoices' 
+                  ? 'border-[var(--accent)] text-[var(--accent)]' 
+                  : 'border-transparent text-[var(--text2)] hover:text-[var(--text)]'
+              }`}
+            >
+              💳 Оплати та Рахунки
+            </button>
+            <button 
               onClick={() => setAdminActiveSubTab('settings')} 
               className={`px-4 py-2 font-black text-xs border-b-2 transition-all ${
                 adminActiveSubTab === 'settings' 
@@ -1614,6 +1634,73 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
                         ⚠️ Очистити еталонну базу категорій
                       </button>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SUB-TAB: CATALOG & WAREHOUSES */}
+              {adminActiveSubTab === 'catalog' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Suppliers List */}
+                  <div className="card flex flex-col gap-4">
+                    <h2 className="text-sm font-black text-[var(--text)]">📑 Глобальні Постачальники та Прайси</h2>
+                    <p className="text-[10px] text-[var(--text2)] font-semibold mt-0.5">Перелік активних постачальників, підключених до платформи (Явшоке, Mastereva тощо).</p>
+                    <div className="flex flex-col gap-2">
+                      <div className="bg-[var(--surface2)] p-3 rounded-xl border border-[var(--border)] text-xs font-black">
+                        🟢 ЯВШОКЕ (Основний) - Активний (all_drop_opt_price.xml)
+                      </div>
+                      <div className="bg-[var(--surface2)] p-3 rounded-xl border border-[var(--border)] text-xs font-black">
+                        🔵 MASTEREVA - Активний (Masterevanew.xml)
+                      </div>
+                    </div>
+                  </div>
+                  {/* Warehouses List */}
+                  <div className="card flex flex-col gap-4">
+                    <h2 className="text-sm font-black text-[var(--text)]">🏭 Склади та Локації</h2>
+                    <p className="text-[10px] text-[var(--text2)] font-semibold mt-0.5">Всі склади та розподільні центри, задіяні в обробці.</p>
+                    <div className="flex flex-col gap-2">
+                      <div className="bg-[var(--surface2)] p-3 rounded-xl border border-[var(--border)] text-xs font-semibold">
+                        • Головний склад Явшоке (Одеса)
+                      </div>
+                      <div className="bg-[var(--surface2)] p-3 rounded-xl border border-[var(--border)] text-xs font-semibold">
+                        • Склад Mastereva (Київ)
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SUB-TAB: INVOICES & BILLING */}
+              {adminActiveSubTab === 'invoices' && (
+                <div className="card flex flex-col gap-4">
+                  <div>
+                    <h2 className="text-sm font-black text-[var(--text)]">💳 Оплати та Рахунки клієнтів (Білінг)</h2>
+                    <p className="text-[10px] text-[var(--text2)] font-semibold mt-0.5">Виписка та облік балансів для SaaS-підписок.</p>
+                  </div>
+                  
+                  {/* Issue invoice simulator */}
+                  <div className="bg-[var(--surface2)]/30 border border-[var(--border)] p-4 rounded-2xl flex flex-col gap-3 text-xs font-bold mt-2">
+                    <span className="text-[var(--text)] block font-extrabold">Виписати новий рахунок користувачу</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <input type="text" placeholder="ID користувача (Email)" id="billing_user_email" className="input-field text-xs py-1" />
+                      <input type="number" placeholder="Сума (₴)" id="billing_amount" className="input-field text-xs py-1" />
+                      <input type="text" placeholder="Період (напр. Липень 2026)" id="billing_period" className="input-field text-xs py-1" />
+                    </div>
+                    <button
+                      onClick={() => {
+                        const email = (document.getElementById('billing_user_email') as HTMLInputElement)?.value || '';
+                        const amount = (document.getElementById('billing_amount') as HTMLInputElement)?.value || '';
+                        const period = (document.getElementById('billing_period') as HTMLInputElement)?.value || '';
+                        if (!email || !amount) {
+                          showToast('⚠️ Вкажіть пошту та суму рахунку');
+                          return;
+                        }
+                        showToast(`✅ Рахунок на суму ${amount} ₴ для ${email} за період "${period}" успішно сформовано!`);
+                      }}
+                      className="gbtn bg-[var(--accent)] text-white text-[10px] font-black py-1.5 px-3 rounded-lg self-start"
+                    >
+                      Сформувати рахунок
+                    </button>
                   </div>
                 </div>
               )}

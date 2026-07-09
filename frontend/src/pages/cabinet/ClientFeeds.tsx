@@ -524,17 +524,19 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                     <h4 className="font-extrabold text-xs text-[var(--text)]">Налаштування правил фільтрації товарів</h4>
                     
                     <div className="flex flex-col gap-2">
-                      {feedRules.filter(r => r.type === 'filter_exclude' || r.type === 'filter_include').map((r, idx) => (
+                      {feedRules.filter(r => r.type === 'filter').map((r, idx) => (
                         <div key={idx} className="flex justify-between items-center bg-[var(--surface2)] border border-[var(--border)] p-3 rounded-xl text-[10px] font-bold">
                           <div>
-                            <span className={`inline-flex px-1.5 py-0.5 rounded ${
-                              r.type === 'filter_exclude' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'
-                            } mr-2 font-black`}>
-                              {r.type === 'filter_exclude' ? '🚫 ВИКЛЮЧИТИ' : '✅ ВКЛЮЧИТИ'}
+                            <span className="inline-flex px-1.5 py-0.5 rounded bg-red-50 text-red-600 mr-2 font-black">
+                              🚫 ФІЛЬТР
                             </span>
                             <span className="text-[var(--text2)]">Діє на:</span> <span className="text-[var(--text)] mr-3 uppercase">{r.scope === 'global' ? '🌐 Глобально' : r.scope === 'category' ? `📂 Категорія ${r.scope_value}` : `🏭 Постачальник ${r.scope_value}`}</span>
-                            <span className="text-red-500 font-extrabold">
-                              {r.config.keywords ? `Ключові слова: ${r.config.keywords.join(', ')}` : 'Всі товари'}
+                            <span className="text-slate-700 dark:text-slate-300">
+                              {r.config.exclude_out_of_stock && ' [Без наявності]'}
+                              {r.config.exclude_no_picture && ' [Без фото]'}
+                              {r.config.min_cost_price && ` [Мін.ціна: ${r.config.min_cost_price}₴]`}
+                              {r.config.exclude_brands && r.config.exclude_brands.length > 0 && ` [Викл.бренди: ${r.config.exclude_brands.join(', ')}]`}
+                              {r.config.stop_words && r.config.stop_words.length > 0 && ` [Стоп-слова: ${r.config.stop_words.join(', ')}]`}
                             </span>
                           </div>
                           <button 
@@ -564,43 +566,57 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                             <input type="text" placeholder={newRuleScope === 'category' ? "напр. u0_12" : "напр. Supplier.xml"} onChange={(e) => setNewRuleScopeValue(e.target.value)} className="input-field w-full text-xs py-1" />
                           </div>
                         )}
-                        <div className="col-span-2">
-                          <label className="font-bold text-[var(--text2)] mb-1 block">Дія правила</label>
-                          <select 
-                            onChange={(e) => {
-                              setNewRuleConfig({
-                                ...newRuleConfig,
-                                filter_action: e.target.value
-                              });
-                            }}
-                            className="input-field w-full text-xs py-1"
-                          >
-                            <option value="exclude">Видалити товари за ключовими словами</option>
-                            <option value="include">Залишити ТІЛЬКИ товари за ключовими словами</option>
-                          </select>
+
+                        <div className="col-span-2 grid grid-cols-2 gap-2 mt-2">
+                          <label className="flex items-center gap-2 font-bold text-[var(--text)]">
+                            <input type="checkbox" id="flt_out_of_stock" className="rounded border-[var(--border)] accent-[var(--accent)]" />
+                            Виключити товари не в наявності
+                          </label>
+                          <label className="flex items-center gap-2 font-bold text-[var(--text)]">
+                            <input type="checkbox" id="flt_no_picture" className="rounded border-[var(--border)] accent-[var(--accent)]" />
+                            Виключити товари без фото
+                          </label>
                         </div>
 
                         <div className="col-span-2">
-                          <label className="font-bold text-[var(--text2)] mb-1 block">Ключові слова (через кому, напр. Б/У, копія, уцінка)</label>
-                          <input type="text" placeholder="уцінка, брак, дефект" id="flt_keywords" className="input-field w-full text-xs py-1" />
+                          <label className="font-bold text-[var(--text2)] mb-1 block">Виключити наступні бренди (через кому)</label>
+                          <input type="text" placeholder="напр. Nike, Adidas" id="flt_exclude_brands" className="input-field w-full text-xs py-1" />
+                        </div>
+
+                        <div>
+                          <label className="font-bold text-[var(--text2)] mb-1 block">Виключити товари дешевші за (₴)</label>
+                          <input type="number" placeholder="напр. 150" id="flt_min_price" className="input-field w-full text-xs py-1" />
+                        </div>
+                        <div>
+                          <label className="font-bold text-[var(--text2)] mb-1 block">Виключити за стоп-словами у назві/описі (через кому)</label>
+                          <input type="text" placeholder="напр. брак, дефект" id="flt_stop_words" className="input-field w-full text-xs py-1" />
                         </div>
                       </div>
                       <button 
                         onClick={() => {
-                          const text = (document.getElementById("flt_keywords") as HTMLInputElement)?.value || '';
-                          const keywords = text.split(',').map(s => s.trim()).filter(Boolean);
-                          if (!keywords.length) {
-                            showToast("⚠️ Будь ласка, введіть ключові слова");
-                            return;
-                          }
+                          const exclude_out_of_stock = (document.getElementById("flt_out_of_stock") as HTMLInputElement)?.checked || false;
+                          const exclude_no_picture = (document.getElementById("flt_no_picture") as HTMLInputElement)?.checked || false;
+                          const min_cost_price = (document.getElementById("flt_min_price") as HTMLInputElement)?.value || '';
+                          
+                          const brandsText = (document.getElementById("flt_exclude_brands") as HTMLInputElement)?.value || '';
+                          const exclude_brands = brandsText.split(',').map(s => s.trim()).filter(Boolean);
 
-                          const type = (newRuleConfig.filter_action || 'exclude') === 'exclude' ? 'filter_exclude' : 'filter_include';
+                          const stopText = (document.getElementById("flt_stop_words") as HTMLInputElement)?.value || '';
+                          const stop_words = stopText.split(',').map(s => s.trim()).filter(Boolean);
+
                           setFeedRules([...feedRules, {
-                            type,
+                            type: 'filter',
                             scope: newRuleScope,
                             scope_value: newRuleScopeValue,
-                            config: { keywords }
+                            config: {
+                              exclude_out_of_stock,
+                              exclude_no_picture,
+                              exclude_brands,
+                              min_cost_price,
+                              stop_words
+                            }
                           }]);
+                          showToast("✅ Правило фільтрації додано");
                         }}
                         className="gbtn bg-[var(--accent)] text-white text-[10px] font-black py-1.5 px-3 rounded-xl mt-2 flex items-center justify-center gap-1"
                       >
@@ -671,15 +687,25 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                 {/* Other settings tab */}
                 {activeRuleTab === 'other' && (
                   <div className="flex flex-col gap-4">
-                    <h4 className="font-extrabold text-xs text-[var(--text)]">Пошук та заміна тексту в назвах / описах товарів</h4>
+                    <h4 className="font-extrabold text-xs text-[var(--text)]">Додаткові налаштування та модифікації товарів</h4>
                     
                     <div className="flex flex-col gap-2">
-                      {feedRules.filter(r => r.type === 'replace_text' || r.type === 'stopwords').map((rule, idx) => (
+                      {feedRules.filter(r => ['replace', 'brand', 'custom_params', 'photo_order', 'fallback_params'].includes(r.type)).map((rule, idx) => (
                         <div key={idx} className="flex justify-between items-center bg-[var(--surface2)] border border-[var(--border)] py-2 px-3 rounded-xl text-[10px] font-semibold">
-                          {rule.type === 'replace_text' ? (
-                            <span>Замінити <strong className="text-[var(--text)]">"{rule.config.search_text}"</strong> на <strong className="text-[var(--text)]">"{rule.config.replace_text}"</strong></span>
-                          ) : (
-                            <span>Стоп-слова для видалення: <strong className="text-[var(--text)]">{(rule.config.keywords || []).join(', ')}</strong></span>
+                          {rule.type === 'replace' && (
+                            <span>Замінити <strong className="text-[var(--text)]">"{rule.config.search}"</strong> на <strong className="text-[var(--text)]">"{rule.config.replace}"</strong></span>
+                          )}
+                          {rule.type === 'brand' && (
+                            <span>Заміна пустого бренду на: <strong className="text-[var(--text)]">{rule.config.default_brand}</strong></span>
+                          )}
+                          {rule.type === 'photo_order' && (
+                            <span>Сортування фото: <strong className="text-[var(--text)]">{rule.config.photo_order_mode === 'reverse' ? 'Зворотне' : 'Останнє першим'}</strong></span>
+                          )}
+                          {rule.type === 'custom_params' && (
+                            <span>Свої параметри: <strong className="text-[var(--text)]">{(rule.config.custom_param_name || []).join(', ')}</strong></span>
+                          )}
+                          {rule.type === 'fallback_params' && (
+                            <span>Резервні параметри якщо менше {rule.config.fallback_min_count} шт.</span>
                           )}
                           <button 
                             onClick={() => {
@@ -698,21 +724,21 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                       <div className="bg-[var(--surface2)]/30 border border-[var(--border)] p-4 rounded-2xl flex flex-col gap-3 text-xs font-bold">
                         <span className="text-[var(--text)] block font-extrabold">🔍 Пошук та заміна тексту</span>
                         <div className="flex flex-col gap-2">
-                          <input type="text" placeholder="Текст для пошуку (напр. 'купити оптом')" id="oth_search_text" className="input-field text-xs py-1 w-full" />
-                          <input type="text" placeholder="Замінити на (напр. 'UTRADE')" id="oth_replace_text" className="input-field text-xs py-1 w-full" />
+                          <input type="text" placeholder="Текст для пошуку (напр. 'купити оптом')" id="oth_search" className="input-field text-xs py-1 w-full" />
+                          <input type="text" placeholder="Замінити на (напр. 'UTRADE')" id="oth_replace" className="input-field text-xs py-1 w-full" />
                         </div>
                         <button
                           onClick={() => {
-                            const search = (document.getElementById("oth_search_text") as HTMLInputElement)?.value || '';
-                            const replace = (document.getElementById("oth_replace_text") as HTMLInputElement)?.value || '';
+                            const search = (document.getElementById("oth_search") as HTMLInputElement)?.value || '';
+                            const replace = (document.getElementById("oth_replace") as HTMLInputElement)?.value || '';
                             if (!search.trim()) {
                               showToast("⚠️ Введіть текст для пошуку");
                               return;
                             }
                             setFeedRules([...feedRules, {
-                              type: 'replace_text',
+                              type: 'replace',
                               scope: 'global',
-                              config: { search_text: search, replace_text: replace }
+                              config: { search, replace }
                             }]);
                             showToast("✅ Заміна тексту додана");
                           }}
@@ -722,31 +748,81 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                         </button>
                       </div>
 
-                      {/* Stopwords Box */}
-                      <div className="bg-[var(--surface2)]/30 border border-[var(--border)] p-4 rounded-2xl flex flex-col gap-3 text-xs font-bold justify-between">
-                        <div>
-                          <span className="text-[var(--text)] block font-extrabold">🚫 Глобальні стоп-слова</span>
-                          <p className="text-[9px] text-[var(--text2)] mt-0.5">Будь-які товари, назва яких містить ці слова, будуть автоматично видалені.</p>
-                          <input type="text" placeholder="напр. б/у, брак, копія (через кому)" id="oth_stopwords" className="input-field text-xs py-1 w-full mt-2" />
-                        </div>
+                      {/* Brand settings */}
+                      <div className="bg-[var(--surface2)]/30 border border-[var(--border)] p-4 rounded-2xl flex flex-col gap-3 text-xs font-bold">
+                        <span className="text-[var(--text)] block font-extrabold">🏷️ Бренд за замовчуванням</span>
+                        <input type="text" placeholder="Назва бренду (якщо пустий)" id="oth_default_brand" className="input-field text-xs py-1 w-full" />
                         <button
                           onClick={() => {
-                            const text = (document.getElementById("oth_stopwords") as HTMLInputElement)?.value || '';
-                            const list = text.split(',').map(s => s.trim()).filter(Boolean);
-                            if (!list.length) {
-                              showToast("⚠️ Введіть стоп-слова");
+                            const default_brand = (document.getElementById("oth_default_brand") as HTMLInputElement)?.value || '';
+                            if (!default_brand.trim()) {
+                              showToast("⚠️ Вкажіть назву бренду");
                               return;
                             }
                             setFeedRules([...feedRules, {
-                              type: 'stopwords',
+                              type: 'brand',
                               scope: 'global',
-                              config: { keywords: list }
+                              config: { default_brand }
                             }]);
-                            showToast("✅ Стоп-слова додані");
+                            showToast("✅ Бренд за замовчуванням додано");
                           }}
-                          className="gbtn bg-[var(--accent)] text-white text-[10px] font-black py-1.5 px-3 rounded-lg mt-2"
+                          className="gbtn bg-[var(--accent)] text-white text-[10px] font-black py-1.5 px-3 rounded-lg mt-1"
                         >
-                          Впровадити стоп-слова
+                          Впровадити бренд
+                        </button>
+                      </div>
+
+                      {/* Photo sorting */}
+                      <div className="bg-[var(--surface2)]/30 border border-[var(--border)] p-4 rounded-2xl flex flex-col gap-3 text-xs font-bold">
+                        <span className="text-[var(--text)] block font-extrabold">📷 Порядок фотографій</span>
+                        <select id="oth_photo_order_mode" className="input-field text-xs py-1 w-full">
+                          <option value="reverse">Зворотний порядок фото</option>
+                          <option value="last_to_first">Останнє фото зробити головним (першим)</option>
+                        </select>
+                        <button
+                          onClick={() => {
+                            const photo_order_mode = (document.getElementById("oth_photo_order_mode") as HTMLSelectElement)?.value as any;
+                            setFeedRules([...feedRules, {
+                              type: 'photo_order',
+                              scope: 'global',
+                              config: { photo_order_mode }
+                            }]);
+                            showToast("✅ Правило сортування фото додано");
+                          }}
+                          className="gbtn bg-[var(--accent)] text-white text-[10px] font-black py-1.5 px-3 rounded-lg mt-1"
+                        >
+                          Впровадити порядок фото
+                        </button>
+                      </div>
+
+                      {/* Custom parameter injection */}
+                      <div className="bg-[var(--surface2)]/30 border border-[var(--border)] p-4 rounded-2xl flex flex-col gap-3 text-xs font-bold">
+                        <span className="text-[var(--text)] block font-extrabold">🛠️ Власні параметри товару</span>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input type="text" placeholder="Назва (напр. 'Країна')" id="oth_param_name" className="input-field text-xs py-1" />
+                          <input type="text" placeholder="Значення (напр. 'Україна')" id="oth_param_value" className="input-field text-xs py-1" />
+                        </div>
+                        <button
+                          onClick={() => {
+                            const name = (document.getElementById("oth_param_name") as HTMLInputElement)?.value || '';
+                            const value = (document.getElementById("oth_param_value") as HTMLInputElement)?.value || '';
+                            if (!name.trim() || !value.trim()) {
+                              showToast("⚠️ Введіть назву та значення параметра");
+                              return;
+                            }
+                            setFeedRules([...feedRules, {
+                              type: 'custom_params',
+                              scope: 'global',
+                              config: {
+                                custom_param_name: [name],
+                                custom_param_value: [value]
+                              }
+                            }]);
+                            showToast("✅ Параметр додано");
+                          }}
+                          className="gbtn bg-[var(--accent)] text-white text-[10px] font-black py-1.5 px-3 rounded-lg mt-1"
+                        >
+                          Додати параметр
                         </button>
                       </div>
                     </div>

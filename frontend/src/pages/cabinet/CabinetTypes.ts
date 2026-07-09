@@ -57,7 +57,7 @@ export interface FeedSupplier {
 }
 
 export interface FeedRule {
-  type: 'markup' | 'filter_exclude' | 'filter_include' | 'replace_text' | 'stopwords';
+  type: 'markup' | 'filter' | 'replace' | 'brand' | 'custom_params' | 'photo_order' | 'fallback_params' | 'strip_text' | 'include_categories';
   scope: 'global' | 'category' | 'supplier';
   scope_value?: string;
   config: {
@@ -67,6 +67,21 @@ export interface FeedRule {
     search_text?: string;
     replace_text?: string;
     keywords?: string[];
+    exclude_out_of_stock?: boolean;
+    exclude_no_picture?: boolean;
+    exclude_brands?: string[];
+    min_cost_price?: string;
+    default_brand?: string;
+    custom_param_name?: string[];
+    custom_param_value?: string[];
+    photo_order_mode?: 'reverse' | 'last_to_first';
+    fallback_min_count?: number;
+    fallback_param_name?: string[];
+    fallback_param_value?: string[];
+    category_ids?: string[];
+    search?: string;
+    replace?: string;
+    stop_words?: string[];
   };
 }
 
