@@ -122,8 +122,8 @@ export default function Layout() {
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
-                if (location.pathname !== '/') {
-                  navigate('/');
+                if (location.pathname !== '/catalog') {
+                  navigate('/catalog');
                 }
               }}
             />

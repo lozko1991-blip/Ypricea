@@ -783,17 +783,15 @@ export default function Catalog() {
         <div className="flex flex-col gap-1 overflow-y-auto pr-1 flex-1 custom-scrollbar">
           <button
             onClick={() => handleSelectSupplier('all')}
-            className={`flex items-center justify-between text-xs py-1.5 px-2 rounded-xl transition-all font-bold ${
+            className={`flex items-center justify-start gap-2 text-xs py-1.5 px-2 rounded-xl transition-all font-bold w-full ${
               selectedSupplier === 'all'
                 ? 'bg-[var(--text)] text-[var(--surface)] font-black'
                 : 'text-[var(--text2)] hover:bg-[var(--surface2)]'
             }`}
           >
-            <span className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-current" />
-              Всі склади
-            </span>
-            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${
+            <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0" />
+            <span className="truncate">Всі склади</span>
+            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md shrink-0 ${
               selectedSupplier === 'all' ? 'bg-[var(--surface)] text-[var(--text)]' : 'bg-[var(--surface2)] text-[var(--text2)]'
             }`}>
               {supplierCounts.all.toLocaleString('uk-UA')}
@@ -807,18 +805,16 @@ export default function Catalog() {
               <button
                 key={s.key}
                 onClick={() => handleSelectSupplier(s.key)}
-                className={`flex items-center justify-between text-xs py-1.5 px-2 rounded-xl transition-all font-bold ${
+                className={`flex items-center justify-start gap-2 text-xs py-1.5 px-2 rounded-xl transition-all font-bold w-full ${
                   isActive ? 'text-white font-black' : 'text-[var(--text2)] hover:bg-[var(--surface2)]'
                 }`}
                 style={{
                   backgroundColor: isActive ? s.color : undefined
                 }}
               >
-                <span className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: isActive ? '#fff' : s.color }} />
-                  {s.label}
-                </span>
-                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: isActive ? '#fff' : s.color }} />
+                <span className="truncate text-left">{s.label}</span>
+                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md shrink-0 ${
                   isActive ? 'bg-white/20 text-white' : 'bg-[var(--surface2)] text-[var(--text2)]'
                 }`}>
                   {count.toLocaleString('uk-UA')}
@@ -901,7 +897,7 @@ export default function Catalog() {
       <div className="flex gap-6 items-start">
 
         {/* Left Categories Tree & Filters (Desktop Sidebar 2) */}
-        <aside className="card w-64 shrink-0 hidden lg:flex flex-col gap-4 sticky top-20 h-[calc(100vh-120px)] overflow-hidden">
+        <aside className="card w-56 shrink-0 hidden lg:flex flex-col gap-4 sticky top-20 h-[calc(100vh-120px)] overflow-hidden">
           {renderSidebarFilters(false)}
           
           <div className="border-b border-[var(--border)] pb-2 pt-2">
@@ -1003,7 +999,7 @@ export default function Catalog() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                 {paginatedProducts.map(p => {
                   const imgUrl = p.i ? (p.i.startsWith('http') ? p.i : `${data?.imgPrefix || ''}${p.i}`) : '';
                   return (
@@ -1103,7 +1099,7 @@ export default function Catalog() {
         </div>
 
         {/* Rightmost Suppliers Column (Desktop Sidebar 2) */}
-        <aside className="card w-60 shrink-0 hidden lg:flex flex-col sticky top-20 h-[calc(100vh-120px)] overflow-hidden">
+        <aside className="card w-48 shrink-0 hidden lg:flex flex-col sticky top-20 h-[calc(100vh-120px)] overflow-hidden">
           {renderSuppliersList()}
         </aside>
       </div>
