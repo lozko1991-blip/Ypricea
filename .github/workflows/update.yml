@@ -4,6 +4,8 @@ on:
   schedule:
     - cron: '0 */5 * * *'   # кожні 5 годин (UTC: 00,05,10,15,20)
   workflow_dispatch: {}      # ручний запуск кнопкою
+  repository_dispatch:
+    types: [ manual_rebuild ] # запуск через API з кабінету адміна
   push:
     branches: [ main ]
     paths:
@@ -39,6 +41,9 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Fetch and Process Data
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node process.mjs
 
       - name: Build React Frontend

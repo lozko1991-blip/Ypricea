@@ -766,62 +766,67 @@ export default function Catalog() {
     return rows;
   };
 
-  const renderSidebarFilters = () => {
+  const renderSuppliersList = () => {
+    return (
+      <div className="flex flex-col gap-2 h-full">
+        <div className="border-b border-[var(--border)] pb-2">
+          <h2 className="text-xs font-black tracking-wider text-[var(--text2)] uppercase">Склади</h2>
+        </div>
+        <div className="flex flex-col gap-1 overflow-y-auto pr-1 flex-1 custom-scrollbar">
+          <button
+            onClick={() => handleSelectSupplier('all')}
+            className={`flex items-center justify-between text-xs py-1.5 px-2 rounded-xl transition-all font-bold ${
+              selectedSupplier === 'all'
+                ? 'bg-[var(--text)] text-[var(--surface)] font-black'
+                : 'text-[var(--text2)] hover:bg-[var(--surface2)]'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-current" />
+              Всі склади
+            </span>
+            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${
+              selectedSupplier === 'all' ? 'bg-[var(--surface)] text-[var(--text)]' : 'bg-[var(--surface2)] text-[var(--text2)]'
+            }`}>
+              {supplierCounts.all.toLocaleString('uk-UA')}
+            </span>
+          </button>
+          
+          {activeSuppliers.map(s => {
+            const isActive = selectedSupplier === s.key;
+            const count = supplierCounts[s.key] || 0;
+            return (
+              <button
+                key={s.key}
+                onClick={() => handleSelectSupplier(s.key)}
+                className={`flex items-center justify-between text-xs py-1.5 px-2 rounded-xl transition-all font-bold ${
+                  isActive ? 'text-white font-black' : 'text-[var(--text2)] hover:bg-[var(--surface2)]'
+                }`}
+                style={{
+                  backgroundColor: isActive ? s.color : undefined
+                }}
+              >
+                <span className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: isActive ? '#fff' : s.color }} />
+                  {s.label}
+                </span>
+                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${
+                  isActive ? 'bg-white/20 text-white' : 'bg-[var(--surface2)] text-[var(--text2)]'
+                }`}>
+                  {count.toLocaleString('uk-UA')}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderSidebarFilters = (isMobile = false) => {
     return (
       <div className="flex flex-col gap-4">
-        {/* Suppliers block */}
-        <div className="flex flex-col gap-2">
-          <div className="border-b border-[var(--border)] pb-2 flex items-center justify-between">
-            <h2 className="text-xs font-black tracking-wider text-[var(--text2)] uppercase">Склади</h2>
-          </div>
-          <div className="flex flex-col gap-1 max-h-48 overflow-y-auto pr-1 noscroll">
-            <button
-              onClick={() => handleSelectSupplier('all')}
-              className={`flex items-center justify-between text-xs py-1.5 px-2 rounded-xl transition-all font-bold ${
-                selectedSupplier === 'all'
-                  ? 'bg-[var(--text)] text-[var(--surface)] font-black'
-                  : 'text-[var(--text2)] hover:bg-[var(--surface2)]'
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                Всі склади
-              </span>
-              <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${
-                selectedSupplier === 'all' ? 'bg-[var(--surface)] text-[var(--text)]' : 'bg-[var(--surface2)] text-[var(--text2)]'
-              }`}>
-                {supplierCounts.all.toLocaleString('uk-UA')}
-              </span>
-            </button>
-            
-            {activeSuppliers.map(s => {
-              const isActive = selectedSupplier === s.key;
-              const count = supplierCounts[s.key] || 0;
-              return (
-                <button
-                  key={s.key}
-                  onClick={() => handleSelectSupplier(s.key)}
-                  className={`flex items-center justify-between text-xs py-1.5 px-2 rounded-xl transition-all font-bold ${
-                    isActive ? 'text-white font-black' : 'text-[var(--text2)] hover:bg-[var(--surface2)]'
-                  }`}
-                  style={{
-                    backgroundColor: isActive ? s.color : undefined
-                  }}
-                >
-                  <span className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: isActive ? '#fff' : s.color }} />
-                    {s.label}
-                  </span>
-                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${
-                    isActive ? 'bg-white/20 text-white' : 'bg-[var(--surface2)] text-[var(--text2)]'
-                  }`}>
-                    {count.toLocaleString('uk-UA')}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        {isMobile && renderSuppliersList()}
 
         {/* Brand block */}
         <div className="flex flex-col gap-1.5">
@@ -886,9 +891,14 @@ export default function Catalog() {
     <div className="flex flex-col gap-6">
 
       <div className="flex gap-6 items-start">
-        {/* Left Categories Tree (Desktop Sidebar) */}
-        <aside className="card w-64 shrink-0 hidden lg:flex flex-col gap-4 sticky top-20 max-h-[calc(100vh-120px)] overflow-hidden">
-          {renderSidebarFilters()}
+        {/* Leftmost Suppliers Column (Desktop Sidebar 1) */}
+        <aside className="card w-60 shrink-0 hidden lg:flex flex-col sticky top-20 h-[calc(100vh-120px)] overflow-hidden">
+          {renderSuppliersList()}
+        </aside>
+
+        {/* Left Categories Tree & Filters (Desktop Sidebar 2) */}
+        <aside className="card w-64 shrink-0 hidden lg:flex flex-col gap-4 sticky top-20 h-[calc(100vh-120px)] overflow-hidden">
+          {renderSidebarFilters(false)}
           
           <div className="border-b border-[var(--border)] pb-2 pt-2">
             <h2 className="text-sm font-black text-[var(--text)]">Категорії</h2>
@@ -1095,7 +1105,7 @@ export default function Catalog() {
             </button>
           </div>
 
-          {renderSidebarFilters()}
+          {renderSidebarFilters(true)}
 
           <div className="border-b border-[var(--border)] pb-2 pt-2">
             <h2 className="text-sm font-black text-[var(--text)]">Категорії</h2>

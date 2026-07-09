@@ -723,6 +723,573 @@ function buildMasterevaExports(me) {
   return made;
 }
 
+// ──────────── 3c. Користувацькі фіди (user-feed-*.json) ────────────
+async function downloadUrlWithRetry(url, destPath) {
+  let attempts = 3;
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      await pipeline(res.body, fs.createWriteStream(destPath));
+      return true;
+    } catch (e) {
+      if (i === attempts) throw e;
+      console.log(`   ⚠️ Помилка завантаження (спроба ${i}/${attempts}): ${e.message}. Повтор за 3с...`);
+      await new Promise(r => setTimeout(r, 3000));
+    }
+  }
+}
+
+function parseCustomXml(filePath, supplierPrefix) {
+  return new Promise((resolve, reject) => {
+    const parser = new SaxesParser();
+    const categories = [];
+    const offers = [];
+
+    let inOffer = false, offer = null;
+    let curCat = null;
+    let tag = '', textBuf = '', cdataBuf = '';
+    let inDesc = false, descBuf = '', descDepth = 0;
+
+    parser.on('error', reject);
+
+    parser.on('opentag', (node) => {
+      const n = node.name;
+      if (inDesc) {
+        descDepth++;
+        descBuf += `<${n}`;
+        for (const [k, v] of Object.entries(node.attributes)) descBuf += ` ${k}="${v}"`;
+        descBuf += '>';
+        tag = ''; textBuf = ''; cdataBuf = '';
+        return;
+      }
+      if (n === 'category') {
+        curCat = {
+          id: supplierPrefix + String(node.attributes.id || ''),
+          parentId: node.attributes.parentId ? (supplierPrefix + String(node.attributes.parentId)) : null,
+          name: ''
+        };
+      } else if (n === 'offer' || n === 'item') {
+        inOffer = true;
+        offer = {
+          id: node.attributes.id ? (supplierPrefix + String(node.attributes.id)) : '',
+          groupId: node.attributes.group_id ? (supplierPrefix + String(node.attributes.group_id)) : null,
+          available: node.attributes.available === 'true',
+          categoryId: '',
+          price: '',
+          name: '',
+          name_ua: '',
+          vendorCode: '',
+          vendor: '',
+          pictures: [],
+          params: [],
+          description: '',
+          description_ua: '',
+          rawFields: {}
+        };
+      } else if (inOffer && (n === 'description' || n === 'description_ua' || n === 'descriptionUa' || n === 'desc')) {
+        inDesc = true; descBuf = ''; descDepth = 0;
+      } else if (inOffer && (n === 'param' || n === 'property' || n === 'attribute' || n === 'characteristic')) {
+        offer.curParam = { name: node.attributes.name || '', value: '' };
+      }
+      tag = n; textBuf = ''; cdataBuf = '';
+    });
+
+    parser.on('text', (t) => { if (inDesc) descBuf += t; else textBuf += t; });
+    parser.on('cdata', (t) => { if (inDesc) descBuf += t; else cdataBuf += t; });
+
+    parser.on('closetag', (node) => {
+      const n = node.name;
+      if (inDesc) {
+        if (n === 'description' || n === 'description_ua' || n === 'descriptionUa' || n === 'desc') {
+          if (n === 'description_ua' || n === 'descriptionUa') offer.description_ua = descBuf.trim();
+          else offer.description = descBuf.trim();
+          inDesc = false;
+        } else {
+          descBuf += `</${n}>`;
+        }
+        textBuf = ''; cdataBuf = ''; return;
+      }
+      const rawVal = (cdataBuf || textBuf).trim();
+      const val = rawVal.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&nbsp;/g, ' ');
+
+      if (curCat) {
+        if (n === 'category') {
+          curCat.name = val;
+          if (curCat.id) categories.push(curCat);
+          curCat = null;
+        }
+      } else if (inOffer) {
+        if (n === 'param' || n === 'property' || n === 'attribute' || n === 'characteristic') {
+          if (offer.curParam) {
+            offer.curParam.value = val;
+            offer.params.push(offer.curParam);
+            offer.curParam = null;
+          }
+        } else if (n === 'picture') {
+          if (val) offer.pictures.push(val);
+        } else if (n === 'offer' || n === 'item') {
+          inOffer = false;
+
+          // Normalization of YML / XML elements following Importer.php fallbacks
+          const rf = offer.rawFields;
+          
+          if (!offer.id) {
+            const fallbackId = rf.id || rf.sku || rf.vendorCode || rf.article || rf.product_id;
+            offer.id = fallbackId ? (supplierPrefix + String(fallbackId)) : '';
+          }
+          
+          let pName = rf.name_ua || rf.nameUa || rf.name || '';
+          if (!pName && (rf.vendor || rf.model)) {
+            pName = `${rf.vendor || ''} ${rf.model || ''}`.trim();
+          }
+          offer.name_ua = pName;
+          offer.name = rf.name || pName;
+
+          const priceVal = rf.priceRUAH || rf.price_uah || rf.retail_price || rf.retailprice || rf.price;
+          offer.price = priceVal || '0';
+
+          const costVal = rf.price_drop || rf['price-drop'] || rf.pricedrop || rf.purchasing_price || rf.cost_price || rf.price_opt || rf.wholesale_price || rf.wholesaleprice || rf.in_price || priceVal;
+          // If no optic cost price is specified, default to retail price
+          offer.price_opt = costVal || priceVal || '0';
+
+          offer.description = offer.description || rf.description || rf.desc || '';
+          offer.description_ua = offer.description_ua || rf.description_ua || rf.descriptionUa || offer.description;
+
+          const catIdVal = rf.categoryId || rf.category_id;
+          offer.categoryId = catIdVal ? (supplierPrefix + String(catIdVal)) : '';
+
+          offer.vendorCode = rf.vendorCode || rf.article || rf.sku || '';
+          offer.vendor = rf.vendor || rf.brand || '';
+          
+          const stockVal = rf.stock_quantity || rf.quantity_in_stock || rf.stock;
+          if (stockVal !== undefined) {
+            const stockNum = parseInt(stockVal);
+            if (!isNaN(stockNum) && stockNum <= 0) {
+              offer.available = false;
+            }
+          }
+
+          // Clean up rawFields before storing to optimize memory
+          delete offer.rawFields;
+
+          if (offer.id && offer.name_ua) {
+            offers.push(offer);
+          }
+          offer = null;
+        } else {
+          // Collect all elements inside rawFields
+          offer.rawFields[n] = val;
+        }
+      }
+      textBuf = ''; cdataBuf = '';
+    });
+
+    parser.on('end', () => {
+      resolve({ categories, offers });
+    });
+
+    const stream = fs.createReadStream(filePath, { encoding: 'utf8' });
+    stream.on('data', chunk => parser.write(chunk));
+    stream.on('error', reject);
+    stream.on('end', () => {
+      parser.close();
+    });
+  });
+}
+
+async function buildUserCustomExports() {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  let presets = [];
+  if (supabaseUrl && supabaseKey) {
+    console.log('🌐 Зчитуємо користувацькі конфіги з Supabase DB...');
+    try {
+      const url = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/user_feeds?select=*`;
+      const res = await fetch(url, {
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`
+        }
+      });
+      if (res.ok) {
+        presets = await res.json();
+        console.log(`   ✅ Зчитано ${presets.length} конфігів з Supabase!`);
+      } else {
+        console.warn(`   ⚠️ Не вдалося зчитати з Supabase: status ${res.status}`);
+      }
+    } catch (e) {
+      console.warn('   ⚠️ Помилка зчитування з Supabase, fallback до файлів presets/:', e.message);
+    }
+  }
+
+  if (!presets.length) {
+    const presetDir = 'presets';
+    if (fs.existsSync(presetDir)) {
+      const files = fs.readdirSync(presetDir).filter(f => /^user-feed-.+\.json$/i.test(f));
+      for (const f of files) {
+        try {
+          const preset = JSON.parse(fs.readFileSync(path.join(presetDir, f), 'utf8'));
+          preset.token = preset.token || f.replace(/\.json$/i, '').replace(/^user-feed-/, '');
+          presets.push(preset);
+        } catch (e) {
+          console.warn(`Користувацький пресет ${f}: помилка парсингу JSON`);
+        }
+      }
+    }
+  }
+
+  if (!presets.length) {
+    console.log('ℹ️ [user-feed-export] немає пресетів для обробки');
+    return [];
+  }
+
+  console.log(`🧩 Обробка користувацьких пресетів: ${presets.length}`);
+  fs.mkdirSync(path.join(CONFIG.OUT_DIR, 'exports'), { recursive: true });
+
+  const parsedXmlCache = new Map();
+  const made = [];
+
+  for (const preset of presets) {
+    const token = preset.token;
+    const name = String(preset.name || token).replace(/[^a-zA-Z0-9_-]/g, '') || 'feed';
+    const suppliers = preset.suppliers || [];
+    const rules = preset.rules || [];
+    const catMapping = preset.category_mapping || {};
+
+    if (!suppliers.length) {
+      console.log(`   ⚠️ [user-feed-export] пресет ${name} не має постачальників`);
+      continue;
+    }
+
+    console.log(`⚙️ [user-feed-export] обробка "${name}" (${suppliers.length} постачальників)...`);
+
+    const mergedCats = [];
+    const mergedOffers = [];
+
+    for (let i = 0; i < suppliers.length; i++) {
+      const sup = suppliers[i];
+      const supUrl = sup.xml_url || sup.url;
+      if (!supUrl) continue;
+
+      const supPrefix = `u${i}_`;
+
+      let parsedData;
+      if (parsedXmlCache.has(supUrl)) {
+        parsedData = parsedXmlCache.get(supUrl);
+      } else {
+        const tmpPath = `temp_user_xml_${i}_${Date.now()}.xml`;
+        console.log(`   📥 Завантаження XML для ${sup.name || 'Постачальник #' + i}...`);
+        try {
+          await downloadUrlWithRetry(supUrl, tmpPath);
+          console.log(`   ⚙️ Парсинг XML...`);
+          parsedData = await parseCustomXml(tmpPath, supPrefix);
+          parsedXmlCache.set(supUrl, parsedData);
+        } catch (err) {
+          console.warn(`   ⚠️ Не вдалося завантажити/обробити ${supUrl}:`, err.message);
+          warn(`User supplier error: ${err.message}`);
+          parsedData = null;
+        } finally {
+          try { fs.unlinkSync(tmpPath); } catch {}
+        }
+      }
+
+      if (parsedData) {
+        parsedData.categories.forEach(c => {
+          mergedCats.push({ ...c });
+        });
+        parsedData.offers.forEach(o => {
+          mergedOffers.push({ ...o });
+        });
+      }
+    }
+
+    if (!mergedOffers.length) {
+      console.log(`   ⚠️ [user-feed-export] "${name}": 0 товарів після завантаження постачальників`);
+      continue;
+    }
+
+    const catById = {};
+    mergedCats.forEach(c => {
+      catById[c.id] = { id: c.id, name: c.name, parentId: c.parentId || null };
+    });
+
+    const childrenOf = {};
+    mergedCats.forEach(c => {
+      const p = c.parentId || '';
+      (childrenOf[p] = childrenOf[p] || []).push(c.id);
+    });
+
+    mergedCats.forEach(c => {
+      const mapped = catMapping[c.id];
+      if (mapped && mapped.id) {
+        c.id = String(mapped.id);
+        c.name = mapped.name || c.name;
+      }
+    });
+
+    mergedOffers.forEach(o => {
+      const originalCatId = o.categoryId;
+      const mapped = catMapping[originalCatId];
+      if (mapped && mapped.id) {
+        o.categoryId = String(mapped.id);
+      }
+    });
+
+    const mappedCatById = {};
+    mergedCats.forEach(c => {
+      mappedCatById[c.id] = { id: c.id, name: c.name, parentId: c.parentId || null };
+    });
+
+    const mappedChildrenOf = {};
+    mergedCats.forEach(c => {
+      const p = c.parentId || '';
+      (mappedChildrenOf[p] = mappedChildrenOf[p] || []).push(c.id);
+    });
+
+    const isInCategoryBranch = (catId, targetCatId) => {
+      if (catId === targetCatId) return true;
+      const stack = [targetCatId];
+      const visited = new Set();
+      while (stack.length) {
+        const curr = stack.pop();
+        if (visited.has(curr)) continue;
+        visited.add(curr);
+        if (curr === catId) return true;
+        (mappedChildrenOf[curr] || []).forEach(ch => stack.push(ch));
+      }
+      return false;
+    };
+
+    let filteredOffers = [];
+    for (const o of mergedOffers) {
+      let keep = true;
+      const cost = parseFloat(o.price) || 0;
+      const nameLower = (o.name || '').toLowerCase() + ' ' + (o.name_ua || '').toLowerCase();
+      const descLower = (o.description || '').toLowerCase() + ' ' + (o.description_ua || '').toLowerCase();
+      const vendorLower = (o.vendor || '').toLowerCase();
+
+      for (const rule of rules) {
+        if (rule.type !== 'filter') continue;
+
+        if (rule.scope === 'category' && !isInCategoryBranch(o.categoryId, rule.scope_value)) continue;
+        if (rule.scope === 'supplier' && !o.id.startsWith(rule.scope_value + '_')) continue;
+
+        const cfg = rule.config || {};
+
+        if (cfg.exclude_category) {
+          keep = false;
+          break;
+        }
+        if (cfg.exclude_out_of_stock && !o.available) {
+          keep = false;
+          break;
+        }
+        if (cfg.exclude_no_picture && (!o.pictures || o.pictures.length === 0)) {
+          keep = false;
+          break;
+        }
+        if (cfg.stop_words && cfg.stop_words.length > 0) {
+          const hasStopWord = cfg.stop_words.some(word => 
+            nameLower.includes(word.toLowerCase()) || descLower.includes(word.toLowerCase())
+          );
+          if (hasStopWord) {
+            keep = false;
+            break;
+          }
+        }
+        if (cfg.exclude_brands && cfg.exclude_brands.length > 0) {
+          const hasExcludedBrand = cfg.exclude_brands.some(brand => 
+            vendorLower.includes(brand.toLowerCase()) || nameLower.includes(brand.toLowerCase())
+          );
+          if (hasExcludedBrand) {
+            keep = false;
+            break;
+          }
+        }
+        if (cfg.min_cost_price && cost < parseFloat(cfg.min_cost_price)) {
+          keep = false;
+          break;
+        }
+      }
+
+      if (keep) {
+        filteredOffers.push(o);
+      }
+    }
+
+    const whitelistRules = rules.filter(r => r.type === 'include_categories');
+    if (whitelistRules.length > 0) {
+      const allowedCats = new Set();
+      for (const rule of whitelistRules) {
+        const ids = rule.config.category_ids || [];
+        const stack = [...ids].map(String);
+        while (stack.length) {
+          const cid = stack.pop();
+          if (allowedCats.has(cid)) continue;
+          allowedCats.add(cid);
+          (mappedChildrenOf[cid] || []).forEach(ch => stack.push(ch));
+        }
+      }
+      filteredOffers = filteredOffers.filter(o => allowedCats.has(o.categoryId));
+    }
+
+    for (const o of filteredOffers) {
+      let finalPrice = parseFloat(o.price) || 0;
+
+      for (const rule of rules) {
+        if (rule.type !== 'markup') continue;
+
+        if (rule.scope === 'category' && !isInCategoryBranch(o.categoryId, rule.scope_value)) continue;
+        if (rule.scope === 'supplier' && !o.id.startsWith(rule.scope_value + '_')) continue;
+
+        const cfg = rule.config || {};
+
+        if (cfg.markup_type === 'ranges') {
+          const ranges = cfg.ranges || [];
+          const matchRange = ranges.find(r => {
+            const min = parseFloat(r.min) || 0;
+            const max = r.max ? parseFloat(r.max) : Infinity;
+            return finalPrice >= min && finalPrice < max;
+          });
+          if (matchRange) {
+            const pct = parseFloat(matchRange.percent) || 0;
+            const fxd = parseFloat(matchRange.fixed) || 0;
+            finalPrice = finalPrice * (1 + pct / 100) + fxd;
+          }
+        } else {
+          const pct = parseFloat(cfg.percent) || 0;
+          const fxd = parseFloat(cfg.fixed) || 0;
+          finalPrice = finalPrice * (1 + pct / 100) + fxd;
+        }
+      }
+
+      o.finalPrice = Math.max(1, Math.round(finalPrice));
+    }
+
+    for (const o of filteredOffers) {
+      let vendor = o.vendor || '';
+      let name = o.name || '';
+      let nameUa = o.name_ua || '';
+      let desc = o.description || '';
+      let descUa = o.description_ua || '';
+      let pics = [...(o.pictures || [])];
+      let params = [...(o.params || [])];
+
+      for (const rule of rules) {
+        if (rule.scope === 'category' && !isInCategoryBranch(o.categoryId, rule.scope_value)) continue;
+        if (rule.scope === 'supplier' && !o.id.startsWith(rule.scope_value + '_')) continue;
+
+        const cfg = rule.config || {};
+
+        if (rule.type === 'brand' && !vendor && cfg.default_brand) {
+          vendor = cfg.default_brand;
+        }
+
+        if (rule.type === 'replace' && cfg.search !== undefined && cfg.replace !== undefined) {
+          const rx = new RegExp(cfg.search.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'g');
+          name = name.replace(rx, cfg.replace);
+          nameUa = nameUa.replace(rx, cfg.replace);
+          desc = desc.replace(rx, cfg.replace);
+          descUa = descUa.replace(rx, cfg.replace);
+        }
+
+        if (rule.type === 'custom_params' && cfg.custom_param_name && cfg.custom_param_name.length > 0) {
+          cfg.custom_param_name.forEach((pName, idx) => {
+            const pVal = cfg.custom_param_value?.[idx] || '';
+            if (pName && pVal) {
+              params.push({ name: pName, value: pVal });
+            }
+          });
+        }
+
+        if (rule.type === 'photo_order' && pics.length > 1) {
+          if (cfg.photo_order_mode === 'reverse') {
+            pics.reverse();
+          } else if (cfg.photo_order_mode === 'last_to_first') {
+            const last = pics.pop();
+            pics.unshift(last);
+          }
+        }
+
+        if (rule.type === 'fallback_params') {
+          const minCount = parseInt(cfg.fallback_min_count) || 3;
+          if (params.length < minCount && cfg.fallback_param_name && cfg.fallback_param_name.length > 0) {
+            cfg.fallback_param_name.forEach((pName, idx) => {
+              const pVal = cfg.fallback_param_value?.[idx] || '';
+              if (pName && pVal && !params.some(p => p.name === pName)) {
+                params.push({ name: pName, value: pVal });
+              }
+            });
+          }
+        }
+
+        if (rule.type === 'strip_text' && cfg.strip_text && cfg.strip_text.length > 0) {
+          cfg.strip_text.forEach(text => {
+            if (text) {
+              const regex = new RegExp(text.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi');
+              desc = desc.replace(regex, '');
+              descUa = descUa.replace(regex, '');
+            }
+          });
+        }
+      }
+
+      o.vendor = vendor;
+      o.name = name;
+      o.name_ua = nameUa;
+      o.description = desc;
+      o.description_ua = descUa;
+      o.pictures = pics;
+      o.params = params;
+    }
+
+    const promOffers = filteredOffers.map(o => ({
+      id: o.id,
+      available: o.available,
+      cat: o.categoryId,
+      drop: parseFloat(o.price) || 0,
+      finalPrice: o.finalPrice,
+      name: o.name,
+      name_ua: o.name_ua,
+      vendorCode: o.vendorCode,
+      groupId: o.groupId || '',
+      barcode: o.barcode || '',
+      pics: o.pictures,
+      desc: o.description,
+      desc_ua: o.description_ua,
+      params: o.params
+    }));
+
+    const xmlOpts = {
+      idPrefix: preset.idPrefix || '',
+      catPrefix: preset.catPrefix || '',
+      addBrand: !!preset.addBrand,
+      defaultBrand: preset.defaultBrand || '',
+      fillParams: !!preset.fillParams
+    };
+
+    const outPath = path.join(CONFIG.OUT_DIR, 'exports', name + '.xml');
+    const xmlContent = buildPromXml(promOffers, mappedCatById, xmlOpts);
+    fs.writeFileSync(outPath, xmlContent);
+
+    
+    const count = promOffers.length;
+    made.push({ name, count, url: `${CONFIG.SITE_URL}/exports/${name}.xml`, token });
+    console.log(`   📦 exports/${name}.xml — ${count} товарів (Користувацький фід)`);
+  }
+
+  try {
+    fs.writeFileSync(
+      path.join(DATA_DIR, 'user-exports.json'), 
+      JSON.stringify({ updated: new Date().toISOString().slice(0, 19).replace('T', ' ') + ' UTC', exports: made })
+    );
+  } catch (e) { /* ignore */ }
+
+  return made;
+}
+
 // ──────────── 4. Звіт у GitHub Actions Summary ────────────
 function writeSummary(meta, exportsMade) {
   const lines = [
@@ -1762,6 +2329,15 @@ async function runDraap() {
   // ── Draap ──
   console.log('🧩 Обробка Draap...');
   const draap = await runDraap();
+
+  // ── Користувацькі фіди ──
+  console.log('📦 Генерація користувацьких автопрайсів...');
+  try {
+    const userFeeds = await buildUserCustomExports();
+    if (userFeeds.length) console.log(`   ✅ Створено користувацьких фідів: ${userFeeds.length}`);
+  } catch (err) {
+    console.error('⚠️ Помилка генерації користувацьких фідів:', err.message);
+  }
 
   // ── ШАРДИНГ: об'єднуємо всі джерела й пишемо для сайту ──
   console.log('🧩 Збираємо шарди (ЯВШОКЕ + Mastereva + Iposud2 + AGER + ISSA Plus + Draap)...');
