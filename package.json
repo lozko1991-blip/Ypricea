@@ -8,6 +8,7 @@
     "build": "node process.mjs"
   },
   "dependencies": {
+    "iconv-lite": "^0.7.3",
     "jsdom": "^29.1.1",
     "saxes": "^6.0.0"
   }

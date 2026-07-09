@@ -9,6 +9,46 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import { SaxesParser } from 'saxes';
+import iconv from 'iconv-lite';
+import dns from 'node:dns/promises';
+import { isIP } from 'node:net';
+
+async function validateUrl(urlStr) {
+  try {
+    const parsed = new URL(urlStr);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error('Unsupported protocol: ' + parsed.protocol);
+    }
+    const host = parsed.hostname;
+    // Resolve DNS
+    const addresses = await dns.resolve(host).catch(() => []);
+    if (isIP(host)) {
+      addresses.push(host);
+    }
+    
+    // Check if any address is private
+    for (const ip of addresses) {
+      if (
+        ip === '127.0.0.1' ||
+        ip === '::1' ||
+        ip === '169.254.169.254' ||
+        ip.startsWith('10.') ||
+        ip.startsWith('192.168.') ||
+        (ip.startsWith('172.') && parseInt(ip.split('.')[1], 10) >= 16 && parseInt(ip.split('.')[1], 10) <= 31)
+      ) {
+        throw new Error('SSRF Blocked: Private IP address detected: ' + ip);
+      }
+    }
+    return true;
+  } catch (e) {
+    throw new Error(`SSRF Blocked: Invalid or unsafe URL (${urlStr}). Details: ${e.message}`);
+  }
+}
+
+async function safeFetch(url, options) {
+  await validateUrl(url);
+  return fetch(url, options);
+}
 
 // ──────────── CONFIG (тут міняй правила) ────────────
 const CONFIG = {
@@ -72,7 +112,7 @@ async function download(retries = 3) {
   for (let i = 1; i <= retries; i++) {
     try {
       console.log(`📥 Завантаження XML (спроба ${i}/${retries}):`, CONFIG.XML_URL);
-      const res = await fetch(CONFIG.XML_URL, { headers: { 'Accept-Encoding': 'gzip, deflate, br' } });
+      const res = await safeFetch(CONFIG.XML_URL, { headers: { 'Accept-Encoding': 'gzip, deflate, br' } });
       if (!res.ok) throw new Error('HTTP ' + res.status + ' при завантаженні XML');
       await pipeline(res.body, fs.createWriteStream(TMP_XML));
       const mb = (fs.statSync(TMP_XML).size / 1048576).toFixed(1);
@@ -92,9 +132,8 @@ function parse() {
     const parser = new SaxesParser();
     const categories = []; // {id,name,parentId}
     const catById = {};
-    const offersByCat = new Map(); // catId -> [offer]
+    const parsedOffers = new Map(); // id -> offer record
     let totalOffers = 0, removedByPrice = 0;
-    const seenIds = new Set(); // захист від дублів id у вхідному XML
 
     // стан парсингу
     let inOffer = false, offer = null;
@@ -125,8 +164,8 @@ function parse() {
           pics: [], name: '', name_ua: '', desc: '', desc_ua: '',
           vendor: '', vendorCode: '', barcode: '', params: [],
         };
-      } else if (inOffer && n === 'param') {
-        curParam = { name: node.attributes.name || '', value: '' };
+      } else if (inOffer && (n === 'param' || n === 'property' || n === 'attribute' || n === 'characteristic')) {
+        curParam = { name: node.attributes.name || '', value: '', tagName: n };
       } else if (inOffer && n === 'description') {
         inDesc = true; descBuf = ''; descDepth = 0;
       } else if (inOffer && n === 'description_ua') {
@@ -160,8 +199,8 @@ function parse() {
         if (curCat && curCat.id) { curCat.name = textBuf.trim(); categories.push(curCat); catById[curCat.id] = curCat; }
         curCat = null;
       } else if (inOffer) {
-        if (n === 'param') {
-          if (curParam && curParam.name) {
+        if (n === 'param' || n === 'property' || n === 'attribute' || n === 'characteristic') {
+          if (curParam && curParam.tagName === n && curParam.name) {
             curParam.value = val;
             if (curParam.value) {
               // EAN/barcode може йти як param name="Ean" або "EAN" — витягуємо окремо
@@ -201,8 +240,7 @@ function parse() {
       // фільтр по ціні
       if (drop < CONFIG.MIN_DROP) { removedByPrice++; return; }
       if (!o.catId) { warn(`offer ${o.id}: немає categoryId — пропущено`); return; }
-      if (o.id && seenIds.has(o.id)) { warn(`offer ${o.id}: дубль id — пропущено`); return; }
-      if (o.id) seenIds.add(o.id);
+      
       // Націнку в базі НЕ рахуємо. Зберігаємо лише закупівлю (drop).
       // Ціна продажу формується тільки при генерації XML (% + грн з пресету/генератора).
       const rec = {
@@ -215,14 +253,70 @@ function parse() {
         desc: o.desc || '', desc_ua: o.desc_ua || '',
         img: o.pics[0] || '',
       };
-      if (!offersByCat.has(o.catId)) offersByCat.set(o.catId, []);
-      offersByCat.get(o.catId).push(rec);
+      if (o.id) {
+        if (parsedOffers.has(o.id)) {
+          warn(`offer ${o.id}: дубликат ID — перезаписано новішою версією`);
+        }
+        parsedOffers.set(o.id, rec);
+      }
     }
 
-    const stream = fs.createReadStream(TMP_XML, { encoding: 'utf8' });
-    stream.on('data', (chunk) => parser.write(chunk));
+    let encoding = 'utf8';
+    try {
+      const fd = fs.openSync(TMP_XML, 'r');
+      const buffer = Buffer.alloc(2048);
+      const bytesRead = fs.readSync(fd, buffer, 0, 2048, 0);
+      fs.closeSync(fd);
+      const sample = buffer.toString('ascii', 0, bytesRead);
+      if (/encoding=["'](windows-1251|cp1251)["']/i.test(sample)) {
+        encoding = 'win1251';
+        console.log("ℹ️ Виявлено кодування Windows-1251, виконується декодування...");
+      }
+    } catch (e) {
+      console.warn("⚠️ Помилка автовизначення кодування:", e.message);
+    }
+
+    const stream = encoding === 'win1251'
+      ? fs.createReadStream(TMP_XML).pipe(iconv.decodeStream('win1251'))
+      : fs.createReadStream(TMP_XML, { encoding: 'utf8' });
+
+    stream.on('data', (chunk) => {
+      const cleanChunk = chunk.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+      parser.write(cleanChunk);
+    });
     stream.on('error', reject);
-    stream.on('end', () => { parser.close(); resolve({ categories, catById, offersByCat, totalOffers, removedByPrice }); });
+    stream.on('end', () => {
+      parser.close();
+
+      // 1. Variant Description Propagation
+      const groupDescriptions = new Map(); // groupId -> { desc, desc_ua }
+      for (const rec of parsedOffers.values()) {
+        if (rec.groupId) {
+          const stored = groupDescriptions.get(rec.groupId) || { desc: '', desc_ua: '' };
+          if (rec.desc && !stored.desc) stored.desc = rec.desc;
+          if (rec.desc_ua && !stored.desc_ua) stored.desc_ua = rec.desc_ua;
+          groupDescriptions.set(rec.groupId, stored);
+        }
+      }
+      for (const rec of parsedOffers.values()) {
+        if (rec.groupId) {
+          const stored = groupDescriptions.get(rec.groupId);
+          if (stored) {
+            if (!rec.desc && stored.desc) rec.desc = stored.desc;
+            if (!rec.desc_ua && stored.desc_ua) rec.desc_ua = stored.desc_ua;
+          }
+        }
+      }
+
+      // 2. Group by category
+      const offersByCat = new Map();
+      for (const rec of parsedOffers.values()) {
+        if (!offersByCat.has(rec.cat)) offersByCat.set(rec.cat, []);
+        offersByCat.get(rec.cat).push(rec);
+      }
+
+      resolve({ categories, catById, offersByCat, totalOffers, removedByPrice });
+    });
   });
 }
 
@@ -728,7 +822,7 @@ async function downloadUrlWithRetry(url, destPath) {
   let attempts = 3;
   for (let i = 1; i <= attempts; i++) {
     try {
-      const res = await fetch(url);
+      const res = await safeFetch(url);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       await pipeline(res.body, fs.createWriteStream(destPath));
       return true;
@@ -1333,7 +1427,7 @@ function masterevaSrc(categoryId) {
 
 async function masterevaDownload() {
   console.log('📥 [mastereva] Завантаження XML:', CONFIG.MASTEREVA_XML_URL);
-  const res = await fetch(CONFIG.MASTEREVA_XML_URL, { headers: { 'Accept-Encoding': 'gzip, deflate, br' } });
+  const res = await safeFetch(CONFIG.MASTEREVA_XML_URL, { headers: { 'Accept-Encoding': 'gzip, deflate, br' } });
   if (!res.ok) throw new Error('HTTP ' + res.status + ' при завантаженні Mastereva XML');
   await pipeline(res.body, fs.createWriteStream(ME_TMP_XML));
   const mb = (fs.statSync(ME_TMP_XML).size / 1048576).toFixed(1);
@@ -1503,7 +1597,7 @@ const IP_TMP_XML = 'iposud2.xml';
 async function iposud2Download() {
   const url = 'https://i-posud.com.ua/assets/export/xml/export_dropshipper_ua.xml';
   console.log('📥 [iposud2] Завантаження XML:', url);
-  const res = await fetch(url);
+  const res = await safeFetch(url);
   if (!res.ok) throw new Error('HTTP ' + res.status + ' при завантаженні Iposud2 XML');
   await pipeline(res.body, fs.createWriteStream(IP_TMP_XML));
   const mb = (fs.statSync(IP_TMP_XML).size / 1048576).toFixed(1);
@@ -1669,7 +1763,7 @@ const AGER_TMP_XML = 'ager_price.xml';
 async function agerDownload() {
   const url = 'https://ager.ua/yml_prom?code=multi&param=888';
   console.log('📥 [ager] Завантаження XML:', url);
-  const res = await fetch(url);
+  const res = await safeFetch(url);
   if (!res.ok) throw new Error('HTTP ' + res.status + ' при завантаженні AGER XML');
   await pipeline(res.body, fs.createWriteStream(AGER_TMP_XML));
   const mb = (fs.statSync(AGER_TMP_XML).size / 1048576).toFixed(1);
@@ -1872,7 +1966,7 @@ const ISSA_TMP_XML = 'issa_price.xml';
 async function issaDownload() {
   const url = 'https://issaplus.com/load/export_rozetka_ua.xml';
   console.log('📥 [issa] Завантаження XML:', url);
-  const res = await fetch(url);
+  const res = await safeFetch(url);
   if (!res.ok) throw new Error('HTTP ' + res.status + ' при завантаженні ISSA Plus XML');
   await pipeline(res.body, fs.createWriteStream(ISSA_TMP_XML));
   const mb = (fs.statSync(ISSA_TMP_XML).size / 1048576).toFixed(1);
@@ -2084,7 +2178,7 @@ const DRAAP_TMP_XML = 'draap_price.xml';
 async function draapDownload() {
   const url = 'https://gv-top.shop/export/prom/';
   console.log('📥 [draap] Завантаження XML:', url);
-  const res = await fetch(url);
+  const res = await safeFetch(url);
   if (!res.ok) throw new Error('HTTP ' + res.status + ' при завантаженні Draap XML');
   await pipeline(res.body, fs.createWriteStream(DRAAP_TMP_XML));
   const mb = (fs.statSync(DRAAP_TMP_XML).size / 1048576).toFixed(1);
