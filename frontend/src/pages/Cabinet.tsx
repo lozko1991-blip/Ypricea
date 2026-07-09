@@ -284,6 +284,26 @@ export default function Cabinet() {
     return exportsList.filter(e => allowed.includes(e.name));
   }, [exportsList, profile]);
 
+  // Calculate client order statistics for completed/shipped shipments
+  const orderStats = useMemo(() => {
+    let totalSales = 0;
+    let totalProfit = 0;
+    let completedCount = 0;
+    let processingCount = 0;
+
+    orders.forEach(o => {
+      if (o.status === 'done' || o.status === 'shipped') {
+        totalSales += o.total_sell;
+        totalProfit += (o.total_sell - o.total_drop);
+        completedCount++;
+      } else if (o.status === 'new' || o.status === 'processing') {
+        processingCount++;
+      }
+    });
+
+    return { totalSales, totalProfit, completedCount, processingCount };
+  }, [orders]);
+
   // Download XML and replace prices on-the-fly inside the browser
   const handleDownloadWithMarkup = async (url: string, baseName: string) => {
     showToast('⏳ Завантаження та розрахунок XML...');
@@ -1175,20 +1195,43 @@ export default function Cabinet() {
 
         {/* Tab 2: Мої замовлення */}
         {activeTab === 'orders' && (
-          <div className="card">
-            <h2 className="text-sm font-black mb-4">Історія моїх замовлень</h2>
-            {ordersLoading ? (
-              <div className="flex items-center justify-center py-12 text-[var(--text2)]">
-                <Loader2 className="animate-spin mr-2" size={16} />
-                Завантаження замовлень...
+          <div className="flex flex-col gap-6">
+            {/* Order Stats Dashboard */}
+            {!ordersLoading && orders.length > 0 && (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-in fade-in duration-300">
+                <div className="card bg-[var(--surface2)] border border-[var(--border)] p-4 flex flex-col gap-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[var(--text2)]">Продажі (виконані)</span>
+                  <span className="text-base font-black text-[var(--text)]">{orderStats.totalSales.toLocaleString('uk-UA')} ₴</span>
+                </div>
+                <div className="card bg-[var(--surface2)] border border-[var(--border)] p-4 flex flex-col gap-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[var(--text2)]">Зароблено прибутку</span>
+                  <span className="text-base font-black text-emerald-500">{orderStats.totalProfit.toLocaleString('uk-UA')} ₴</span>
+                </div>
+                <div className="card bg-[var(--surface2)] border border-[var(--border)] p-4 flex flex-col gap-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[var(--text2)]">Виконаних угод</span>
+                  <span className="text-base font-black text-[var(--text)]">{orderStats.completedCount}</span>
+                </div>
+                <div className="card bg-[var(--surface2)] border border-[var(--border)] p-4 flex flex-col gap-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[var(--text2)]">В процесі обробки</span>
+                  <span className="text-base font-black text-amber-500">{orderStats.processingCount}</span>
+                </div>
               </div>
-            ) : orders.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-[var(--text2)]">
-                <PackageX size={44} className="mb-3 opacity-30" />
-                <p className="font-extrabold text-xs">У вас ще немає замовлень</p>
-              </div>
-            ) : (
-              <div className="grid gap-4">
+            )}
+
+            <div className="card">
+              <h2 className="text-sm font-black mb-4">Історія моїх замовлень</h2>
+              {ordersLoading ? (
+                <div className="flex items-center justify-center py-12 text-[var(--text2)]">
+                  <Loader2 className="animate-spin mr-2" size={16} />
+                  Завантаження замовлень...
+                </div>
+              ) : orders.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-[var(--text2)]">
+                  <PackageX size={44} className="mb-3 opacity-30" />
+                  <p className="font-extrabold text-xs">У вас ще немає замовлень</p>
+                </div>
+              ) : (
+                <div className="grid gap-4">
                 {orders.map(o => {
                   const items: OrderItem[] = Array.isArray(o.items) 
                     ? o.items 
@@ -1234,9 +1277,20 @@ export default function Cabinet() {
                       </div>
 
                       {o.ttn && (
-                        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl py-2 px-3 flex items-center gap-2 text-xs">
-                          <span className="font-bold text-[var(--text2)]">ТТН Нової Пошти:</span>
-                          <strong className="tracking-wider text-[var(--text)]">{o.ttn}</strong>
+                        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl py-2 px-3 flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-[var(--text2)]">ТТН Нової Пошти:</span>
+                            <strong className="tracking-wider text-[var(--text)]">{o.ttn}</strong>
+                          </div>
+                          <a 
+                            href={`https://novaposhta.ua/tracking/?cargo_number=${o.ttn}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] font-black text-[var(--accent)] hover:underline flex items-center gap-0.5 uppercase tracking-wider shrink-0"
+                          >
+                            Відстежити
+                            <ChevronRight size={12} />
+                          </a>
                         </div>
                       )}
 
@@ -1251,6 +1305,7 @@ export default function Cabinet() {
               </div>
             )}
           </div>
+        </div>
         )}
 
         {/* Tab 3: Профіль (Profile settings) */}
