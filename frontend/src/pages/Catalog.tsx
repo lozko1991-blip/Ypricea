@@ -991,6 +991,15 @@ export default function Catalog() {
                     <div 
                       key={p.id} 
                       onClick={() => setSelectedProduct(p)}
+                      onMouseEnter={() => {
+                        loadShardMap().then(map => {
+                          const shardNum = map[p.id];
+                          if (shardNum) {
+                            loadShard(shardNum);
+                            loadDescShard(shardNum);
+                          }
+                        }).catch(() => {});
+                      }}
                       className="card flex flex-col hover:-translate-y-1 hover:shadow-md transition-all duration-300 cursor-pointer group"
                     >
                       <div className="aspect-square bg-[var(--surface2)] rounded-2xl overflow-hidden mb-3 relative flex items-center justify-center">
