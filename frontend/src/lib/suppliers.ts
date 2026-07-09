@@ -37,6 +37,9 @@ export const MASTEREVA_SUPPLIERS: SupplierInfo[] = [
   { key: 'ev_iposud',     label: 'Mastereva · i-Posud',    short: 'IP', color: '#06b6d4', bg: '#ecfeff', text: '#164e63' },
   { key: 'ev_iposud2',    label: 'Iposud2',                short: 'IP2', color: '#0891b2', bg: '#ecfeff', text: '#155e75' },
   { key: 'ev_websklad',   label: 'Mastereva · Websklad',   short: 'WS', color: '#6366f1', bg: '#eef2ff', text: '#3730a3' },
+  { key: 'ev_ager',       label: 'AGER',                   short: 'AG', color: '#059669', bg: '#d1fae5', text: '#065f46' },
+  { key: 'ev_issa',       label: 'ISSA Plus',              short: 'IS', color: '#d946ef', bg: '#fdf4ff', text: '#701a75' },
+  { key: 'ev_draap',      label: 'Draap',                  short: 'DP', color: '#ea580c', bg: '#fff7ed', text: '#7c2d12' },
 ];
 
 const BY_KEY: Record<string, SupplierInfo> = {

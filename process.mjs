@@ -68,13 +68,22 @@ const warnings = [];
 function warn(msg) { if (warnings.length < 500) warnings.push(msg); }
 
 // ──────────── 1. Завантаження XML (з gzip) ────────────
-async function download() {
-  console.log('📥 Завантаження XML:', CONFIG.XML_URL);
-  const res = await fetch(CONFIG.XML_URL, { headers: { 'Accept-Encoding': 'gzip, deflate, br' } });
-  if (!res.ok) throw new Error('HTTP ' + res.status + ' при завантаженні XML');
-  await pipeline(res.body, fs.createWriteStream(TMP_XML));
-  const mb = (fs.statSync(TMP_XML).size / 1048576).toFixed(1);
-  console.log(`✅ Завантажено ${mb} МБ`);
+async function download(retries = 3) {
+  for (let i = 1; i <= retries; i++) {
+    try {
+      console.log(`📥 Завантаження XML (спроба ${i}/${retries}):`, CONFIG.XML_URL);
+      const res = await fetch(CONFIG.XML_URL, { headers: { 'Accept-Encoding': 'gzip, deflate, br' } });
+      if (!res.ok) throw new Error('HTTP ' + res.status + ' при завантаженні XML');
+      await pipeline(res.body, fs.createWriteStream(TMP_XML));
+      const mb = (fs.statSync(TMP_XML).size / 1048576).toFixed(1);
+      console.log(`✅ Завантажено ${mb} МБ`);
+      return;
+    } catch (e) {
+      console.warn(`⚠️ Помилка завантаження (спроба ${i}):`, e.message);
+      if (i === retries) throw e;
+      await new Promise(r => setTimeout(r, 5000));
+    }
+  }
 }
 
 // ──────────── 2. Потоковий парс ────────────
@@ -305,6 +314,10 @@ function writeShardedCatalog({ meta, keptCats, directCount, totalCount, products
         n: p.name_ua || p.name || '',  // одна назва — UA в пріоритеті (картка показує UA)
         s: p.src,
       };
+      const brandParam = p.params && p.params.find(pm => pm.name === 'Бренд' || pm.name === 'Бренд:' || pm.name === 'Производитель' || pm.name === 'Виробник');
+      if (brandParam && brandParam.value) {
+        lite.b = brandParam.value.trim();
+      }
       if (p.vendorCode) lite.v = p.vendorCode;
       // друга мова та RU-назва — лише якщо відрізняється (економія розміру)
       if (p.name && p.name !== lite.n) lite.nr = p.name;
@@ -1081,6 +1094,633 @@ async function runIposud2() {
   }
 }
 
+// ══════════════════════════════════════════════════════════════
+// AGER — четвертий постачальник (одяг)
+// ══════════════════════════════════════════════════════════════
+const AGER_TMP_XML = 'ager_price.xml';
+
+async function agerDownload() {
+  const url = 'https://ager.ua/yml_prom?code=multi&param=888';
+  console.log('📥 [ager] Завантаження XML:', url);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status + ' при завантаженні AGER XML');
+  await pipeline(res.body, fs.createWriteStream(AGER_TMP_XML));
+  const mb = (fs.statSync(AGER_TMP_XML).size / 1048576).toFixed(1);
+  console.log(`✅ [ager] Завантажено ${mb} МБ`);
+}
+
+function agerParse() {
+  return new Promise((resolve, reject) => {
+    const parser = new SaxesParser();
+    const categories = [];
+    const grouped = new Map();
+    let totalOffers = 0, skipped = 0;
+
+    let inOffer = false, offer = null;
+    let curCat = null;
+    let tag = '', textBuf = '', cdataBuf = '';
+    let inDesc = false, descBuf = '', descDepth = 0;
+
+    parser.on('error', reject);
+
+    parser.on('opentag', (node) => {
+      const n = node.name;
+      if (inDesc) {
+        descDepth++;
+        descBuf += `<${n}`;
+        for (const [k, v] of Object.entries(node.attributes)) descBuf += ` ${k}="${v}"`;
+        descBuf += '>';
+        tag = ''; textBuf = ''; cdataBuf = '';
+        return;
+      }
+      if (n === 'category') {
+        const id = node.attributes.id;
+        const parentId = node.attributes.parentId;
+        curCat = { id, parentId, name: '' };
+      } else if (n === 'offer') {
+        inOffer = true;
+        offer = {
+          id: node.attributes.id,
+          groupId: node.attributes.group_id,
+          available: node.attributes.available === 'true',
+          categoryId: '',
+          price: '',
+          name: '',
+          name_ua: '',
+          vendorCode: '',
+          sku: '',
+          pictures: [],
+          params: [],
+          description: '',
+          description_ua: ''
+        };
+      } else if (inOffer && (n === 'description' || n === 'description_ua')) {
+        inDesc = true; descBuf = ''; descDepth = 0;
+      } else if (inOffer && n === 'param') {
+        offer.curParam = { name: node.attributes.name, value: '' };
+      }
+      tag = n; textBuf = ''; cdataBuf = '';
+    });
+
+    parser.on('text', (t) => { if (inDesc) descBuf += t; else textBuf += t; });
+    parser.on('cdata', (t) => { if (inDesc) descBuf += t; else cdataBuf += t; });
+
+    parser.on('closetag', (node) => {
+      const n = node.name;
+      if (inDesc) {
+        if (n === 'description' || n === 'description_ua') {
+          if (n === 'description_ua') offer.description_ua = descBuf.trim();
+          else offer.description = descBuf.trim();
+          inDesc = false;
+        } else {
+          descBuf += `</${n}>`;
+        }
+        textBuf = ''; cdataBuf = ''; return;
+      }
+      const rawVal = (cdataBuf || textBuf).trim();
+      const val = rawVal.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&nbsp;/g, ' ');
+
+      if (curCat) {
+        if (n === 'category') {
+          curCat.name = val;
+          if (curCat.id) categories.push(curCat);
+          curCat = null;
+        }
+      } else if (inOffer) {
+        if (n === 'categoryId') offer.categoryId = val;
+        else if (n === 'price') offer.price = val;
+        else if (n === 'name') offer.name = val;
+        else if (n === 'name_ua') offer.name_ua = val;
+        else if (n === 'vendorCode') offer.vendorCode = val;
+        else if (n === 'sku') offer.sku = val;
+        else if (n === 'picture') offer.pictures.push(val);
+        else if (n === 'param') {
+          if (offer.curParam) {
+            offer.curParam.value = val;
+            offer.params.push(offer.curParam);
+            offer.curParam = null;
+          }
+        } else if (n === 'offer') {
+          inOffer = false; totalOffers++;
+          agerFinalize(offer);
+          offer = null;
+        }
+      }
+      textBuf = ''; cdataBuf = '';
+    });
+
+    function agerFinalize(o) {
+      if (!o.available) { skipped++; return; }
+      
+      const groupId = o.groupId || o.id;
+      if (!groupId) { skipped++; return; }
+      
+      const sizeVal = (o.params.find(p => p.name === 'Размер' || p.name === 'Розмір')?.value || '').trim();
+      
+      const uniqueGroupId = '83_' + groupId;
+      const uniqueCatId = o.categoryId ? '83000' + o.categoryId : '';
+      if (!uniqueCatId) { skipped++; return; }
+
+      const price = Math.round(parseFloat(o.price) || 0);
+
+      if (!grouped.has(uniqueGroupId)) {
+        grouped.set(uniqueGroupId, {
+          id: uniqueGroupId,
+          available: true,
+          catId: uniqueCatId,
+          price_drop: price,
+          name: o.name_ua || o.name || 'Без назви',
+          name_ua: o.name_ua || o.name || 'Без назви',
+          vendorCode: o.vendorCode || o.sku || groupId,
+          groupId: groupId,
+          barcode: '',
+          pics: o.pictures.slice(0, 8),
+          params: o.params.filter(p => p.name !== 'Размер' && p.name !== 'Розмір'),
+          desc: '',
+          desc_ua: o.description_ua || o.description || '',
+          src: 'ev_ager',
+          sizes: new Set()
+        });
+      }
+
+      const g = grouped.get(uniqueGroupId);
+      if (sizeVal) g.sizes.add(sizeVal);
+    }
+
+    const stream = fs.createReadStream(AGER_TMP_XML, { encoding: 'utf8' });
+    stream.on('data', (chunk) => parser.write(chunk));
+    stream.on('error', reject);
+    stream.on('end', () => {
+      parser.close();
+      const products = [];
+      for (const [gid, g] of grouped) {
+        if (g.sizes.size > 0) {
+          const sortedSizes = Array.from(g.sizes).sort();
+          g.params.push({ name: 'Розмір', value: sortedSizes.join(', ') });
+          products.push(g);
+        } else {
+          skipped++;
+        }
+      }
+      resolve({ categories, products, totalOffers, skipped });
+    });
+  });
+}
+
+async function runAger() {
+  try {
+    await agerDownload();
+    console.log('⚙️ [ager] Парсинг...');
+    const parsed = await agerParse();
+    console.log(`   [ager] offers=${parsed.totalOffers}, categories=${parsed.categories.length}, products=${parsed.products.length}, skipped=${parsed.skipped}`);
+    
+    const enrichedCats = parsed.categories.map(c => {
+      const count = parsed.products.filter(p => p.catId === '83000' + c.id).length;
+      return {
+        id: '83000' + c.id,
+        name: c.name.trim(),
+        parentId: c.parentId ? '83000' + c.parentId : null,
+        count: count,
+        total: count,
+        src: 'ev_ager'
+      };
+    }).filter(c => c.count > 0);
+
+    try { fs.unlinkSync(AGER_TMP_XML); } catch {}
+    console.log(`   ✅ [ager]: ${parsed.products.length} товарів, ${enrichedCats.length} категорій`);
+    return { products: parsed.products, keptCats: enrichedCats };
+  } catch (e) {
+    console.warn('⚠️ [ager] пропущено через помилку:', e.message);
+    warn('AGER: ' + e.message);
+    try { fs.unlinkSync(AGER_TMP_XML); } catch {}
+    return null;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// ISSA Plus — п'ятий постачальник (одяг)
+// ══════════════════════════════════════════════════════════════
+const ISSA_TMP_XML = 'issa_price.xml';
+
+async function issaDownload() {
+  const url = 'https://issaplus.com/load/export_rozetka_ua.xml';
+  console.log('📥 [issa] Завантаження XML:', url);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status + ' при завантаженні ISSA Plus XML');
+  await pipeline(res.body, fs.createWriteStream(ISSA_TMP_XML));
+  const mb = (fs.statSync(ISSA_TMP_XML).size / 1048576).toFixed(1);
+  console.log(`✅ [issa] Завантажено ${mb} МБ`);
+}
+
+function issaParse() {
+  return new Promise((resolve, reject) => {
+    const parser = new SaxesParser();
+    const categories = [];
+    const grouped = new Map();
+    let totalOffers = 0, skipped = 0;
+
+    let inOffer = false, offer = null;
+    let curCat = null;
+    let tag = '', textBuf = '', cdataBuf = '';
+    let inDesc = false, descBuf = '', descDepth = 0;
+
+    parser.on('error', reject);
+
+    parser.on('opentag', (node) => {
+      const n = node.name;
+      if (inDesc) {
+        descDepth++;
+        descBuf += `<${n}`;
+        for (const [k, v] of Object.entries(node.attributes)) descBuf += ` ${k}="${v}"`;
+        descBuf += '>';
+        tag = ''; textBuf = ''; cdataBuf = '';
+        return;
+      }
+      if (n === 'category') {
+        const id = node.attributes.id;
+        const parentId = node.attributes.parentId;
+        curCat = { id, parentId, name: '' };
+      } else if (n === 'offer') {
+        inOffer = true;
+        offer = {
+          id: node.attributes.id,
+          groupId: node.attributes.group_id,
+          available: node.attributes.available === 'true',
+          categoryId: '',
+          price: '',
+          name: '',
+          name_ua: '',
+          vendorCode: '',
+          vendor: '',
+          pictures: [],
+          params: [],
+          description: '',
+          description_ua: ''
+        };
+      } else if (inOffer && (n === 'description' || n === 'description_ua')) {
+        inDesc = true; descBuf = ''; descDepth = 0;
+      } else if (inOffer && n === 'param') {
+        offer.curParam = { name: node.attributes.name, value: '' };
+      }
+      tag = n; textBuf = ''; cdataBuf = '';
+    });
+
+    parser.on('text', (t) => { if (inDesc) descBuf += t; else textBuf += t; });
+    parser.on('cdata', (t) => { if (inDesc) descBuf += t; else cdataBuf += t; });
+
+    parser.on('closetag', (node) => {
+      const n = node.name;
+      if (inDesc) {
+        if (n === 'description' || n === 'description_ua') {
+          if (n === 'description_ua') offer.description_ua = descBuf.trim();
+          else offer.description = descBuf.trim();
+          inDesc = false;
+        } else {
+          descBuf += `</${n}>`;
+        }
+        textBuf = ''; cdataBuf = ''; return;
+      }
+      const rawVal = (cdataBuf || textBuf).trim();
+      const val = rawVal.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&nbsp;/g, ' ');
+
+      if (curCat) {
+        if (n === 'category') {
+          curCat.name = val;
+          if (curCat.id) categories.push(curCat);
+          curCat = null;
+        }
+      } else if (inOffer) {
+        if (n === 'categoryId') offer.categoryId = val;
+        else if (n === 'price') offer.price = val;
+        else if (n === 'name') offer.name = val;
+        else if (n === 'name_ua') offer.name_ua = val;
+        else if (n === 'vendorCode') offer.vendorCode = val;
+        else if (n === 'vendor') offer.vendor = val;
+        else if (n === 'picture') offer.pictures.push(val);
+        else if (n === 'param') {
+          if (offer.curParam) {
+            offer.curParam.value = val;
+            offer.params.push(offer.curParam);
+            offer.curParam = null;
+          }
+        } else if (n === 'offer') {
+          inOffer = false; totalOffers++;
+          issaFinalize(offer);
+          offer = null;
+        }
+      }
+      textBuf = ''; cdataBuf = '';
+    });
+
+    function issaFinalize(o) {
+      if (!o.available) { skipped++; return; }
+      
+      const groupId = o.groupId || o.id;
+      if (!groupId) { skipped++; return; }
+      
+      const sizeVal = (o.params.find(p => p.name === 'Размер' || p.name === 'Розмір')?.value || '').trim();
+      
+      const uniqueGroupId = '84_' + groupId;
+      const uniqueCatId = o.categoryId ? '84000' + o.categoryId : '';
+      if (!uniqueCatId) { skipped++; return; }
+
+      const price = Math.round(parseFloat(o.price) || 0);
+
+      let baseName = o.name_ua || o.name || 'Без назви';
+      if (sizeVal) {
+        baseName = baseName.replace(new RegExp(`\\s+${sizeVal}\\b`, 'g'), '').replace(/\s+/g, ' ').trim();
+      }
+
+      if (!grouped.has(uniqueGroupId)) {
+        const productParams = o.params.filter(p => p.name !== 'Размер' && p.name !== 'Розмір');
+        const brand = o.vendor ? o.vendor.trim() : 'ISSA PLUS';
+        productParams.push({ name: 'Бренд', value: brand });
+
+        grouped.set(uniqueGroupId, {
+          id: uniqueGroupId,
+          available: true,
+          catId: uniqueCatId,
+          price_drop: price,
+          name: baseName,
+          name_ua: baseName,
+          vendorCode: o.vendorCode || groupId,
+          groupId: groupId,
+          barcode: '',
+          pics: o.pictures.slice(0, 8),
+          params: productParams,
+          desc: '',
+          desc_ua: o.description_ua || o.description || '',
+          src: 'ev_issa',
+          sizes: new Set()
+        });
+      }
+
+      const g = grouped.get(uniqueGroupId);
+      if (sizeVal) g.sizes.add(sizeVal);
+    }
+
+    const stream = fs.createReadStream(ISSA_TMP_XML, { encoding: 'utf8' });
+    stream.on('data', (chunk) => parser.write(chunk));
+    stream.on('error', reject);
+    stream.on('end', () => {
+      parser.close();
+      const products = [];
+      for (const [gid, g] of grouped) {
+        if (g.sizes.size > 0) {
+          const sortedSizes = Array.from(g.sizes).sort();
+          g.params.push({ name: 'Розмір', value: sortedSizes.join(', ') });
+          products.push(g);
+        } else {
+          skipped++;
+        }
+      }
+      resolve({ categories, products, totalOffers, skipped });
+    });
+  });
+}
+
+async function runIssa() {
+  try {
+    await issaDownload();
+    console.log('⚙️ [issa] Парсинг...');
+    const parsed = await issaParse();
+    console.log(`   [issa] offers=${parsed.totalOffers}, categories=${parsed.categories.length}, products=${parsed.products.length}, skipped=${parsed.skipped}`);
+    
+    const enrichedCats = parsed.categories.map(c => {
+      const count = parsed.products.filter(p => p.catId === '84000' + c.id).length;
+      return {
+        id: '84000' + c.id,
+        name: c.name.trim(),
+        parentId: c.parentId ? '84000' + c.parentId : null,
+        count: count,
+        total: count,
+        src: 'ev_issa'
+      };
+    }).filter(c => c.count > 0);
+
+    try { fs.unlinkSync(ISSA_TMP_XML); } catch {}
+    console.log(`   ✅ [issa]: ${parsed.products.length} товарів, ${enrichedCats.length} категорій`);
+    return { products: parsed.products, keptCats: enrichedCats };
+  } catch (e) {
+    console.warn('⚠️ [issa] пропущено через помилку:', e.message);
+    warn('ISSA Plus: ' + e.message);
+    try { fs.unlinkSync(ISSA_TMP_XML); } catch {}
+    return null;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// Draap — шостий постачальник (одяг)
+// ══════════════════════════════════════════════════════════════
+const DRAAP_TMP_XML = 'draap_price.xml';
+
+async function draapDownload() {
+  const url = 'https://gv-top.shop/export/prom/';
+  console.log('📥 [draap] Завантаження XML:', url);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status + ' при завантаженні Draap XML');
+  await pipeline(res.body, fs.createWriteStream(DRAAP_TMP_XML));
+  const mb = (fs.statSync(DRAAP_TMP_XML).size / 1048576).toFixed(1);
+  console.log(`✅ [draap] Завантажено ${mb} МБ`);
+}
+
+function draapParse() {
+  return new Promise((resolve, reject) => {
+    const parser = new SaxesParser();
+    const categories = [];
+    const grouped = new Map();
+    let totalOffers = 0, skipped = 0;
+
+    let inOffer = false, offer = null;
+    let curCat = null;
+    let tag = '', textBuf = '', cdataBuf = '';
+    let inDesc = false, descBuf = '', descDepth = 0;
+
+    parser.on('error', reject);
+
+    parser.on('opentag', (node) => {
+      const n = node.name;
+      if (inDesc) {
+        descDepth++;
+        descBuf += `<${n}`;
+        for (const [k, v] of Object.entries(node.attributes)) descBuf += ` ${k}="${v}"`;
+        descBuf += '>';
+        tag = ''; textBuf = ''; cdataBuf = '';
+        return;
+      }
+      if (n === 'category') {
+        const id = node.attributes.id;
+        const parentId = node.attributes.parentId;
+        curCat = { id, parentId, name: '' };
+      } else if (n === 'offer') {
+        inOffer = true;
+        offer = {
+          id: node.attributes.id,
+          groupId: node.attributes.group_id,
+          available: node.attributes.available === 'true',
+          categoryId: '',
+          price: '',
+          name: '',
+          name_ua: '',
+          vendorCode: '',
+          article: '',
+          vendor: '',
+          pictures: [],
+          params: [],
+          description: '',
+          description_ua: '',
+          availableTagVal: ''
+        };
+      } else if (inOffer && (n === 'description' || n === 'description_ua')) {
+        inDesc = true; descBuf = ''; descDepth = 0;
+      } else if (inOffer && n === 'param') {
+        offer.curParam = { name: node.attributes.name, value: '' };
+      }
+      tag = n; textBuf = ''; cdataBuf = '';
+    });
+
+    parser.on('text', (t) => { if (inDesc) descBuf += t; else textBuf += t; });
+    parser.on('cdata', (t) => { if (inDesc) descBuf += t; else cdataBuf += t; });
+
+    parser.on('closetag', (node) => {
+      const n = node.name;
+      if (inDesc) {
+        if (n === 'description' || n === 'description_ua') {
+          if (n === 'description_ua') offer.description_ua = descBuf.trim();
+          else offer.description = descBuf.trim();
+          inDesc = false;
+        } else {
+          descBuf += `</${n}>`;
+        }
+        textBuf = ''; cdataBuf = ''; return;
+      }
+      const rawVal = (cdataBuf || textBuf).trim();
+      const val = rawVal.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&nbsp;/g, ' ');
+
+      if (curCat) {
+        if (n === 'category') {
+          curCat.name = val;
+          if (curCat.id) categories.push(curCat);
+          curCat = null;
+        }
+      } else if (inOffer) {
+        if (n === 'categoryId') offer.categoryId = val;
+        else if (n === 'price') offer.price = val;
+        else if (n === 'name') offer.name = val;
+        else if (n === 'name_ua') offer.name_ua = val;
+        else if (n === 'vendorCode') offer.vendorCode = val;
+        else if (n === 'article') offer.article = val;
+        else if (n === 'vendor') offer.vendor = val;
+        else if (n === 'available') offer.availableTagVal = val;
+        else if (n === 'picture') offer.pictures.push(val);
+        else if (n === 'param') {
+          if (offer.curParam) {
+            offer.curParam.value = val;
+            offer.params.push(offer.curParam);
+            offer.curParam = null;
+          }
+        } else if (n === 'offer') {
+          inOffer = false; totalOffers++;
+          draapFinalize(offer);
+          offer = null;
+        }
+      }
+      textBuf = ''; cdataBuf = '';
+    });
+
+    function draapFinalize(o) {
+      const isAvailable = o.available || o.availableTagVal === 'true';
+      if (!isAvailable) { skipped++; return; }
+      
+      const groupId = o.groupId || o.id;
+      if (!groupId) { skipped++; return; }
+      
+      const sizeVal = (o.params.find(p => p.name === 'Размер' || p.name === 'Розмір')?.value || '').trim();
+      
+      const uniqueGroupId = '85_' + groupId;
+      const uniqueCatId = o.categoryId ? '85000' + o.categoryId : '';
+      if (!uniqueCatId) { skipped++; return; }
+
+      const price = Math.round(parseFloat(o.price) || 0);
+
+      if (!grouped.has(uniqueGroupId)) {
+        const productParams = o.params.filter(p => p.name !== 'Размер' && p.name !== 'Розмір');
+        const brand = o.vendor ? o.vendor.trim() : 'Draap';
+        productParams.push({ name: 'Бренд', value: brand });
+
+        grouped.set(uniqueGroupId, {
+          id: uniqueGroupId,
+          available: true,
+          catId: uniqueCatId,
+          price_drop: price,
+          name: o.name_ua || o.name || 'Без назви',
+          name_ua: o.name_ua || o.name || 'Без назви',
+          vendorCode: o.vendorCode || o.article || groupId,
+          groupId: groupId,
+          barcode: '',
+          pics: o.pictures.slice(0, 8),
+          params: productParams,
+          desc: '',
+          desc_ua: o.description_ua || o.description || '',
+          src: 'ev_draap',
+          sizes: new Set()
+        });
+      }
+
+      const g = grouped.get(uniqueGroupId);
+      if (sizeVal) g.sizes.add(sizeVal);
+    }
+
+    const stream = fs.createReadStream(DRAAP_TMP_XML, { encoding: 'utf8' });
+    stream.on('data', (chunk) => parser.write(chunk));
+    stream.on('error', reject);
+    stream.on('end', () => {
+      parser.close();
+      const products = [];
+      for (const [gid, g] of grouped) {
+        if (g.sizes.size > 0) {
+          const sortedSizes = Array.from(g.sizes).sort();
+          g.params.push({ name: 'Розмір', value: sortedSizes.join(', ') });
+          products.push(g);
+        } else {
+          skipped++;
+        }
+      }
+      resolve({ categories, products, totalOffers, skipped });
+    });
+  });
+}
+
+async function runDraap() {
+  try {
+    await draapDownload();
+    console.log('⚙️ [draap] Парсинг...');
+    const parsed = await draapParse();
+    console.log(`   [draap] offers=${parsed.totalOffers}, categories=${parsed.categories.length}, products=${parsed.products.length}, skipped=${parsed.skipped}`);
+    
+    const enrichedCats = parsed.categories.map(c => {
+      const count = parsed.products.filter(p => p.catId === '85000' + c.id).length;
+      return {
+        id: '85000' + c.id,
+        name: c.name.trim(),
+        parentId: c.parentId ? '85000' + c.parentId : null,
+        count: count,
+        total: count,
+        src: 'ev_draap'
+      };
+    }).filter(c => c.count > 0);
+
+    try { fs.unlinkSync(DRAAP_TMP_XML); } catch {}
+    console.log(`   ✅ [draap]: ${parsed.products.length} товарів, ${enrichedCats.length} категорій`);
+    return { products: parsed.products, keptCats: enrichedCats };
+  } catch (e) {
+    console.warn('⚠️ [draap] пропущено через помилку:', e.message);
+    warn('Draap: ' + e.message);
+    try { fs.unlinkSync(DRAAP_TMP_XML); } catch {}
+    return null;
+  }
+}
+
 // ──────────── main ────────────
 (async () => {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -1102,7 +1742,7 @@ async function runIposud2() {
   console.log('🧩 Обробка Mastereva...');
   const me = await runMastereva();
 
-  // Автопрайси Mastereva (окремо, presets/export-me-*.json → exports/me-*.xml)
+  // Presets exports
   console.log('📦 Генерація автопрайсів Mastereva...');
   const meExportsMade = buildMasterevaExports(me);
   if (meExportsMade.length) console.log(`   ✅ Mastereva-експортів: ${meExportsMade.length}`);
@@ -1111,18 +1751,36 @@ async function runIposud2() {
   console.log('🧩 Обробка Iposud2...');
   const ip2 = await runIposud2();
 
+  // ── AGER ──
+  console.log('🧩 Обробка AGER...');
+  const ager = await runAger();
+
+  // ── ISSA Plus ──
+  console.log('🧩 Обробка ISSA Plus...');
+  const issa = await runIssa();
+
+  // ── Draap ──
+  console.log('🧩 Обробка Draap...');
+  const draap = await runDraap();
+
   // ── ШАРДИНГ: об'єднуємо всі джерела й пишемо для сайту ──
-  console.log('🧩 Збираємо шарди (ЯВШОКЕ + Mastereva + Iposud2)...');
+  console.log('🧩 Збираємо шарди (ЯВШОКЕ + Mastereva + Iposud2 + AGER + ISSA Plus + Draap)...');
   const yavProducts = collectYavshokeProducts(built.offersByCat);
   const yavCats = built.keptCats.map(c => ({ ...c, src: 'yavshoke' }));
   
   const allProducts = yavProducts
     .concat(me ? me.products : [])
-    .concat(ip2 ? ip2.products : []);
+    .concat(ip2 ? ip2.products : [])
+    .concat(ager ? ager.products : [])
+    .concat(issa ? issa.products : [])
+    .concat(draap ? draap.products : []);
     
   const allCats = yavCats
     .concat(me ? me.keptCats : [])
-    .concat(ip2 ? ip2.keptCats : []);
+    .concat(ip2 ? ip2.keptCats : [])
+    .concat(ager ? ager.keptCats : [])
+    .concat(issa ? issa.keptCats : [])
+    .concat(draap ? draap.keptCats : []);
 
   const directCount = { ...built.directCount };
   const totalCount = { ...built.totalCount };
@@ -1132,13 +1790,25 @@ async function runIposud2() {
   if (ip2) {
     ip2.keptCats.forEach(c => { directCount[c.id] = c.count; totalCount[c.id] = c.total; });
   }
+  if (ager) {
+    ager.keptCats.forEach(c => { directCount[c.id] = c.count; totalCount[c.id] = c.total; });
+  }
+  if (issa) {
+    issa.keptCats.forEach(c => { directCount[c.id] = c.count; totalCount[c.id] = c.total; });
+  }
+  if (draap) {
+    draap.keptCats.forEach(c => { directCount[c.id] = c.count; totalCount[c.id] = c.total; });
+  }
 
   const shardMeta = {
     ...built.meta,
     sources: { 
       yavshoke: yavProducts.length, 
       mastereva: me ? me.products.length : 0,
-      iposud2: ip2 ? ip2.products.length : 0
+      iposud2: ip2 ? ip2.products.length : 0,
+      ager: ager ? ager.products.length : 0,
+      issa: issa ? issa.products.length : 0,
+      draap: draap ? draap.products.length : 0
     },
     totalProducts: allProducts.length,
   };

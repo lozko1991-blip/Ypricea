@@ -34,6 +34,7 @@ interface CatalogProduct {
   n: string; // name
   i?: string; // image
   s: string; // source
+  b?: string; // brand
 }
 
 interface Category {
@@ -151,9 +152,13 @@ export default function Catalog() {
   const [selectedProduct, setSelectedProduct] = useState<CatalogProduct | null>(null);
   const [fullDetails, setFullDetails] = useState<any>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'desc' | 'params'>('desc');
   const [activePhotoIdx, setActivePhotoIdx] = useState(0);
+  const [activeTab, setActiveTab] = useState<'desc' | 'params'>('desc');
   const [copied, setCopied] = useState(false);
+  const [selectedSize, setSelectedSize] = useState<string>('');
+  const [selectedBrand, setSelectedBrand] = useState<string>('all');
+  const [minPrice, setMinPrice] = useState<string>('');
+  const [maxPrice, setMaxPrice] = useState<string>('');
 
   // Fetch initial lightweight index and categories
   useEffect(() => {
@@ -182,6 +187,7 @@ export default function Catalog() {
 
   // Fetch product full details (shard) when opening modal
   useEffect(() => {
+    setSelectedSize('');
     if (!selectedProduct) {
       setFullDetails(null);
       return;
@@ -237,6 +243,26 @@ export default function Catalog() {
 
     fetchDetails();
   }, [selectedProduct, data]);
+
+  const sizeParam = useMemo(() => {
+    return fullDetails?.params?.find(
+      (pm: any) => pm.name === 'Розмір' || pm.name === 'Розміри' || pm.name === 'Розміри в наявності'
+    );
+  }, [fullDetails]);
+
+  const sizes = useMemo(() => {
+    return sizeParam 
+      ? sizeParam.value.split(',').map((s: string) => s.trim()).filter(Boolean) 
+      : [];
+  }, [sizeParam]);
+
+  useEffect(() => {
+    if (sizes.length > 0) {
+      setSelectedSize(sizes[0]);
+    } else {
+      setSelectedSize('');
+    }
+  }, [sizes]);
 
   // Reset page when search term changes from header or local input
   useEffect(() => {
@@ -381,21 +407,60 @@ export default function Catalog() {
     return reachable;
   }, [categories, categoryStats]);
 
-  // Collect category search matches
+  // Map of brand names to category IDs containing those brands
+  const categoriesByBrand = useMemo(() => {
+    const mapping: Record<string, Set<string>> = {};
+    if (!data || !data.products) return mapping;
+    data.products.forEach(p => {
+      if (p.b && p.c) {
+        const bLower = p.b.toLowerCase();
+        if (!mapping[bLower]) mapping[bLower] = new Set();
+        mapping[bLower].add(String(p.c));
+      }
+    });
+    return mapping;
+  }, [data]);
+
+  // List of unique brands sorted by product count
+  const availableBrands = useMemo(() => {
+    if (!data || !data.products) return [];
+    const counts: Record<string, number> = {};
+    data.products.forEach(p => {
+      if (p.b) {
+        counts[p.b] = (counts[p.b] || 0) + 1;
+      }
+    });
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => ({ name, count }));
+  }, [data]);
+
+  // Collect category search matches (by category name or containing brand name)
   const searchMatchingCategoryIds = useMemo(() => {
     if (!categorySearchTerm.trim()) return null;
     const matched = new Set<string>();
     const term = categorySearchTerm.toLowerCase();
     
     categories.forEach(c => {
-      if (c.name.toLowerCase().includes(term)) {
+      let matches = c.name.toLowerCase().includes(term);
+      
+      if (!matches) {
+        for (const [brandName, catIds] of Object.entries(categoriesByBrand)) {
+          if (brandName.includes(term) && catIds.has(String(c.id))) {
+            matches = true;
+            break;
+          }
+        }
+      }
+
+      if (matches) {
         const cid = String(c.id);
         matched.add(cid);
         getAncestors(cid, categories).forEach(a => matched.add(String(a.id)));
       }
     });
     return matched;
-  }, [categories, categorySearchTerm]);
+  }, [categories, categorySearchTerm, categoriesByBrand]);
 
   // Get active category branch IDs
   const activeBranchCategoryIds = useMemo(() => {
@@ -423,7 +488,16 @@ export default function Catalog() {
     setExpandedCategories(prev => {
       const next = new Set(prev);
       categories.forEach(c => {
-        if (c.name.toLowerCase().includes(term)) {
+        let matches = c.name.toLowerCase().includes(term);
+        if (!matches) {
+          for (const [brandName, catIds] of Object.entries(categoriesByBrand)) {
+            if (brandName.includes(term) && catIds.has(String(c.id))) {
+              matches = true;
+              break;
+            }
+          }
+        }
+        if (matches) {
           getAncestors(String(c.id), categories).forEach(a => next.add(String(a.id)));
         }
       });
@@ -443,14 +517,27 @@ export default function Catalog() {
       // 2. Category filter
       if (activeBranchCategoryIds && !activeBranchCategoryIds.has(p.c)) return false;
       
-      // 3. Smart Search text filter
+      // 3. Brand filter
+      if (selectedBrand !== 'all' && p.b !== selectedBrand) return false;
+
+      // 4. Price range filter
+      if (minPrice) {
+        const min = parseFloat(minPrice);
+        if (!isNaN(min) && p.pr < min) return false;
+      }
+      if (maxPrice) {
+        const max = parseFloat(maxPrice);
+        if (!isNaN(max) && p.pr > max) return false;
+      }
+
+      // 5. Smart Search text filter
       if (tokens.length > 0) {
         if (!matchProduct(p, tokens)) return false;
       }
       
       return true;
     });
-  }, [data, selectedSupplier, activeBranchCategoryIds, searchTerm]);
+  }, [data, selectedSupplier, activeBranchCategoryIds, searchTerm, selectedBrand, minPrice, maxPrice]);
 
   // Pagination Variables
   const totalProducts = filteredProducts.length;
@@ -641,6 +728,113 @@ export default function Catalog() {
     return rows;
   };
 
+  const renderSidebarFilters = () => {
+    return (
+      <div className="flex flex-col gap-4">
+        {/* Suppliers block */}
+        <div className="flex flex-col gap-2">
+          <div className="border-b border-[var(--border)] pb-2 flex items-center justify-between">
+            <h2 className="text-xs font-black tracking-wider text-[var(--text2)] uppercase">Склади</h2>
+          </div>
+          <div className="flex flex-col gap-1 max-h-48 overflow-y-auto pr-1 noscroll">
+            <button
+              onClick={() => handleSelectSupplier('all')}
+              className={`flex items-center justify-between text-xs py-1.5 px-2 rounded-xl transition-all font-bold ${
+                selectedSupplier === 'all'
+                  ? 'bg-[var(--text)] text-[var(--surface)] font-black'
+                  : 'text-[var(--text2)] hover:bg-[var(--surface2)]'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                Всі склади
+              </span>
+              <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${
+                selectedSupplier === 'all' ? 'bg-[var(--surface)] text-[var(--text)]' : 'bg-[var(--surface2)] text-[var(--text2)]'
+              }`}>
+                {supplierCounts.all.toLocaleString('uk-UA')}
+              </span>
+            </button>
+            
+            {activeSuppliers.map(s => {
+              const isActive = selectedSupplier === s.key;
+              const count = supplierCounts[s.key] || 0;
+              return (
+                <button
+                  key={s.key}
+                  onClick={() => handleSelectSupplier(s.key)}
+                  className={`flex items-center justify-between text-xs py-1.5 px-2 rounded-xl transition-all font-bold ${
+                    isActive ? 'text-white font-black' : 'text-[var(--text2)] hover:bg-[var(--surface2)]'
+                  }`}
+                  style={{
+                    backgroundColor: isActive ? s.color : undefined
+                  }}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: isActive ? '#fff' : s.color }} />
+                    {s.label}
+                  </span>
+                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${
+                    isActive ? 'bg-white/20 text-white' : 'bg-[var(--surface2)] text-[var(--text2)]'
+                  }`}>
+                    {count.toLocaleString('uk-UA')}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Brand block */}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[10px] font-black tracking-wider text-[var(--text2)] uppercase block mb-0.5">Бренд</span>
+          <select
+            value={selectedBrand}
+            onChange={(e) => {
+              setSelectedBrand(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="input-field w-full text-xs font-bold py-1.5 px-2 bg-[var(--surface)] border border-[var(--border)] rounded-xl text-[var(--text)] cursor-pointer"
+          >
+            <option value="all">Всі бренди</option>
+            {availableBrands.map(b => (
+              <option key={b.name} value={b.name}>
+                {b.name} ({b.count})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Price block */}
+        <div className="flex flex-col gap-1.5 border-b border-[var(--border)] pb-4">
+          <span className="text-[10px] font-black tracking-wider text-[var(--text2)] uppercase block mb-0.5">Ціна, ₴</span>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              placeholder="Від"
+              value={minPrice}
+              onChange={(e) => {
+                setMinPrice(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="input-field w-1/2 text-xs py-1.5 px-2 text-center"
+            />
+            <input
+              type="number"
+              placeholder="До"
+              value={maxPrice}
+              onChange={(e) => {
+                setMaxPrice(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="input-field w-1/2 text-xs py-1.5 px-2 text-center"
+            />
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center p-20 gap-4 text-[var(--text2)]">
@@ -652,53 +846,13 @@ export default function Catalog() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Supplier Filtering Tabs */}
-      <div className="flex gap-2 p-1.5 bg-[var(--surface)] border border-[var(--border)] rounded-2xl overflow-x-auto noscroll">
-        <button
-          onClick={() => handleSelectSupplier('all')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-extrabold text-xs whitespace-nowrap transition-all ${
-            selectedSupplier === 'all'
-              ? 'bg-[var(--text)] text-[var(--surface)]'
-              : 'text-[var(--text2)] hover:bg-[var(--surface2)] hover:text-[var(--text)]'
-          }`}
-        >
-          Всі
-          <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${
-            selectedSupplier === 'all' ? 'bg-[var(--surface)] text-[var(--text)]' : 'bg-[var(--surface2)] text-[var(--text2)]'
-          }`}>
-            {supplierCounts.all.toLocaleString('uk-UA')}
-          </span>
-        </button>
-
-        {activeSuppliers.map(s => {
-          const isActive = selectedSupplier === s.key;
-          return (
-            <button
-              key={s.key}
-              onClick={() => handleSelectSupplier(s.key)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-extrabold text-xs whitespace-nowrap transition-all"
-              style={{
-                backgroundColor: isActive ? s.color : 'transparent',
-                color: isActive ? '#fff' : 'var(--text2)'
-              }}
-            >
-              <span 
-                className="w-1.5 h-1.5 rounded-full" 
-                style={{ backgroundColor: isActive ? '#fff' : s.color }}
-              />
-              {s.short}
-              <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-black/10 text-[inherit]">
-                {(supplierCounts[s.key] || 0).toLocaleString('uk-UA')}
-              </span>
-            </button>
-          );
-        })}
-      </div>
 
       <div className="flex gap-6 items-start">
         {/* Left Categories Tree (Desktop Sidebar) */}
         <aside className="card w-64 shrink-0 hidden lg:flex flex-col gap-4 sticky top-20 max-h-[calc(100vh-120px)] overflow-hidden">
-          <div className="border-b border-[var(--border)] pb-2">
+          {renderSidebarFilters()}
+          
+          <div className="border-b border-[var(--border)] pb-2 pt-2">
             <h2 className="text-sm font-black text-[var(--text)]">Категорії</h2>
           </div>
           <div className="relative">
@@ -857,7 +1011,11 @@ export default function Catalog() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                addToCart(p);
+                                if (p.s === 'ev_ager' || p.s === 'ev_issa' || p.s === 'ev_draap') {
+                                  setSelectedProduct(p);
+                                } else {
+                                  addToCart(p);
+                                }
                               }}
                               className="w-7 h-7 rounded-xl bg-[var(--text)] text-[var(--surface)] hover:bg-[var(--accent)] hover:text-white transition-all flex items-center justify-center shadow-sm"
                               title="Додати в кошик"
@@ -884,10 +1042,16 @@ export default function Catalog() {
         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsMobileSidebarOpen(false)} />
         <div className={`absolute top-0 left-0 bottom-0 w-80 max-w-[85vw] bg-[var(--surface)] border-r border-[var(--border)] p-5 flex flex-col gap-4 transition-transform duration-300 ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
           <div className="flex items-center justify-between border-b border-[var(--border)] pb-2">
-            <h2 className="text-sm font-black text-[var(--text)]">Категорії</h2>
+            <span className="text-xs font-black tracking-wider text-[var(--text2)] uppercase">Фільтри</span>
             <button onClick={() => setIsMobileSidebarOpen(false)} className="text-[var(--text2)] hover:text-[var(--text)]">
               <X size={18} />
             </button>
+          </div>
+
+          {renderSidebarFilters()}
+
+          <div className="border-b border-[var(--border)] pb-2 pt-2">
+            <h2 className="text-sm font-black text-[var(--text)]">Категорії</h2>
           </div>
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text2)]" size={14} />
@@ -1036,6 +1200,28 @@ export default function Catalog() {
                   </div>
                 </div>
 
+                {/* Sizes Selector */}
+                {sizes.length > 0 && (
+                  <div className="mb-4">
+                    <span className="text-[10px] font-black tracking-wider text-[var(--text2)] uppercase block mb-2">Оберіть Розмір:</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {sizes.map((sz: string) => (
+                        <button
+                          key={sz}
+                          onClick={() => setSelectedSize(sz)}
+                          className={`px-3 py-1.5 rounded-xl font-extrabold text-xs border transition-all ${
+                            selectedSize === sz
+                              ? 'bg-[var(--accent)] border-[var(--accent)] text-white shadow-sm shadow-blue-500/20'
+                              : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text2)] hover:bg-[var(--surface2)] hover:text-[var(--text)]'
+                          }`}
+                        >
+                          {sz}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Tabs selection */}
                 <div className="flex border-b border-[var(--border)] gap-4 mb-4">
                   <button 
@@ -1110,7 +1296,13 @@ export default function Catalog() {
               </button>
               <button 
                 onClick={() => {
-                  addToCart(selectedProduct);
+                  if (selectedProduct) {
+                    const productToCart = { ...selectedProduct };
+                    if (selectedSize) {
+                      productToCart.n = `${productToCart.n} (Розмір: ${selectedSize})`;
+                    }
+                    addToCart(productToCart);
+                  }
                   setSelectedProduct(null);
                 }}
                 className="gbtn bg-[var(--accent)] text-white shadow-md shadow-blue-500/20 text-xs active:scale-95 transition-all"
