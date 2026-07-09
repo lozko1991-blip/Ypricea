@@ -109,6 +109,9 @@ export default function Cabinet() {
   const [adminOrders, setAdminOrders] = useState<Order[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [expandedUserPanel, setExpandedUserPanel] = useState<string | null>(null);
+  const [adminUserSearch, setAdminUserSearch] = useState('');
+  const [adminOrdersSearch, setAdminOrdersSearch] = useState('');
+  const [adminOrdersStatusFilter, setAdminOrdersStatusFilter] = useState('all');
 
   // Generator States (Admins Only)
   const [categories, setCategories] = useState<Category[]>([]);
@@ -303,6 +306,39 @@ export default function Cabinet() {
 
     return { totalSales, totalProfit, completedCount, processingCount };
   }, [orders]);
+
+  // Filter admin users based on search query
+  const filteredAdminUsers = useMemo(() => {
+    if (!adminUserSearch.trim()) return adminUsers;
+    const s = adminUserSearch.toLowerCase();
+    return adminUsers.filter(u => 
+      (u.name && u.name.toLowerCase().includes(s)) ||
+      (u.store_name && u.store_name.toLowerCase().includes(s)) ||
+      (u.phone && u.phone.toLowerCase().includes(s)) ||
+      (u.id && u.id.toLowerCase().includes(s))
+    );
+  }, [adminUsers, adminUserSearch]);
+
+  // Filter admin orders based on search query and status filter
+  const filteredAdminOrders = useMemo(() => {
+    return adminOrders.filter(o => {
+      // 1. Status Filter
+      if (adminOrdersStatusFilter !== 'all' && o.status !== adminOrdersStatusFilter) return false;
+
+      // 2. Text Search Match
+      if (adminOrdersSearch.trim()) {
+        const s = adminOrdersSearch.toLowerCase();
+        const matchId = String(o.id).includes(s);
+        const matchName = (o.client_name || '').toLowerCase().includes(s);
+        const matchPhone = (o.client_phone || '').toLowerCase().includes(s);
+        const matchDroper = (o.droper_code || '').toLowerCase().includes(s);
+        const matchCity = (o.client_city || '').toLowerCase().includes(s);
+        const matchTtn = (o.ttn || '').toLowerCase().includes(s);
+        if (!matchId && !matchName && !matchPhone && !matchDroper && !matchCity && !matchTtn) return false;
+      }
+      return true;
+    });
+  }, [adminOrders, adminOrdersSearch, adminOrdersStatusFilter]);
 
   // Download XML and replace prices on-the-fly inside the browser
   const handleDownloadWithMarkup = async (url: string, baseName: string) => {
@@ -1641,11 +1677,20 @@ export default function Cabinet() {
                 
                 {/* Dropshipper Profiles Management */}
                 <div className="card xl:col-span-2 flex flex-col gap-4">
-                  <h2 className="text-sm font-black text-[var(--text)] pb-2 border-b border-[var(--border)]">
-                    Користувачі ({adminUsers.length})
-                  </h2>
+                  <div className="border-b border-[var(--border)] pb-2 flex items-center justify-between flex-wrap gap-2">
+                    <h2 className="text-sm font-black text-[var(--text)]">
+                      Користувачі ({filteredAdminUsers.length})
+                    </h2>
+                    <input 
+                      type="text"
+                      placeholder="Пошук користувача..."
+                      value={adminUserSearch}
+                      onChange={(e) => setAdminUserSearch(e.target.value)}
+                      className="input-field text-[11px] py-1 px-2.5 max-w-[200px]"
+                    />
+                  </div>
                   <div className="grid gap-3 max-h-[600px] overflow-y-auto pr-1 noscroll">
-                    {adminUsers.map(u => {
+                    {filteredAdminUsers.map(u => {
                       const allowed = u.allowed_exports || [];
                       const isMe = u.id === user?.id;
                       const dateStr = u.created_at ? new Date(u.created_at).toLocaleDateString('uk-UA') : '';
@@ -1744,11 +1789,34 @@ export default function Cabinet() {
 
                 {/* All Orders Dashboard */}
                 <div className="card flex flex-col gap-4">
-                  <h2 className="text-sm font-black text-[var(--text)] pb-2 border-b border-[var(--border)]">
-                    Останні замовлення ({adminOrders.length})
-                  </h2>
+                  <div className="border-b border-[var(--border)] pb-2 flex flex-col gap-2">
+                    <h2 className="text-sm font-black text-[var(--text)]">
+                      Останні замовлення ({filteredAdminOrders.length})
+                    </h2>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text"
+                        placeholder="Пошук (ID, клієнт, ТТН, дропер)..."
+                        value={adminOrdersSearch}
+                        onChange={(e) => setAdminOrdersSearch(e.target.value)}
+                        className="input-field text-[10px] py-1 px-2 flex-1"
+                      />
+                      <select
+                        value={adminOrdersStatusFilter}
+                        onChange={(e) => setAdminOrdersStatusFilter(e.target.value)}
+                        className="text-[10px] font-bold border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] rounded-lg py-1 px-1.5 focus:outline-none"
+                      >
+                        <option value="all">Всі статуси</option>
+                        <option value="new">Нові</option>
+                        <option value="processing">В обробці</option>
+                        <option value="shipped">Відправлені</option>
+                        <option value="done">Виконані</option>
+                        <option value="cancelled">Скасовані</option>
+                      </select>
+                    </div>
+                  </div>
                   <div className="grid gap-3 max-h-[600px] overflow-y-auto pr-1 noscroll">
-                    {adminOrders.map(o => {
+                    {filteredAdminOrders.map(o => {
                       const profit = Math.round(o.total_sell - o.total_drop);
                       const profitClass = profit >= 0 ? 'text-emerald-500' : 'text-red-500';
                       const date = new Date(o.created_at).toLocaleDateString('uk-UA');
