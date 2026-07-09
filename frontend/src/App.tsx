@@ -5,6 +5,8 @@ import Catalog from './pages/Catalog';
 import Cabinet from './pages/Cabinet';
 import AuthPage from './pages/AuthPage';
 
+import Landing from './pages/Landing';
+
 // Protected route wrapper
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -19,11 +21,13 @@ function App() {
   return (
     <HashRouter>
       <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Catalog />} />
-          <Route path="auth" element={<AuthPage />} />
+        <Route path="/" element={<Landing />} />
+        
+        <Route element={<Layout />}>
+          <Route path="/catalog" element={<Catalog />} />
+          <Route path="/auth" element={<AuthPage />} />
           <Route 
-            path="cabinet" 
+            path="/cabinet" 
             element={
               <ProtectedRoute>
                 <Cabinet />
