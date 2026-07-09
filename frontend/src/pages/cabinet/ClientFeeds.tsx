@@ -123,6 +123,44 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
     }
   };
 
+  const handleClientAutoMap = () => {
+    if (!parsedCategories.length) return;
+    const newMapping = { ...feedCatMapping };
+    
+    const keywordsMap: Record<string, { id: string; name: string }> = {
+      'взуття': { id: '3503', name: 'Взуття' },
+      'обувь': { id: '3503', name: 'Взуття' },
+      'одяг': { id: '3301', name: 'Одяг' },
+      'одежда': { id: '3301', name: 'Одяг' },
+      'дитяч': { id: '2801', name: 'Дитячі товари' },
+      'детск': { id: '2801', name: 'Дитячі товари' },
+      'годинни': { id: '3705', name: 'Годинники' },
+      'часы': { id: '3705', name: 'Годинники' },
+      'аксесуар': { id: '3701', name: 'Аксесуари' },
+      'чехол': { id: '1202', name: 'Чохли для телефонів' },
+      'чехлы': { id: '1202', name: 'Чохли для телефонів' },
+      'наушник': { id: '1205', name: 'Навушники' },
+      'навушник': { id: '1205', name: 'Навушники' }
+    };
+
+    let mappedCount = 0;
+    parsedCategories.forEach(cat => {
+      const nameLower = cat.name.toLowerCase();
+      if (!newMapping[cat.id] || !newMapping[cat.id].id) {
+        for (const [key, target] of Object.entries(keywordsMap)) {
+          if (nameLower.includes(key)) {
+            newMapping[cat.id] = target;
+            mappedCount++;
+            break;
+          }
+        }
+      }
+    });
+
+    setFeedCatMapping(newMapping);
+    showToast(`✅ Автоматично співставлено ${mappedCount} категорій!`);
+  };
+
   const onSaveClick = async () => {
     if (!feedName.trim()) {
       showToast("⚠️ Будь ласка, введіть назву фіду");
@@ -631,7 +669,17 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                   <div className="flex flex-col gap-3">
                     <div className="flex justify-between items-center flex-wrap gap-2">
                       <h4 className="font-extrabold text-xs text-[var(--text)]">Мапінг оригінальних категорій на Prom.ua / Rozetka</h4>
-                      <span className="text-[10px] font-bold text-[var(--text2)]">Категорій постачальників: {parsedCategories.length}</span>
+                      <div className="flex items-center gap-3">
+                        {parsedCategories.length > 0 && (
+                          <button 
+                            onClick={handleClientAutoMap}
+                            className="gbtn border border-[var(--accent)] text-[var(--accent)] text-[9px] font-black py-1 px-3.5 rounded-lg hover:bg-[var(--accent)] hover:text-white transition-all"
+                          >
+                            🪄 Автомапінг (Fuzzy)
+                          </button>
+                        )}
+                        <span className="text-[10px] font-bold text-[var(--text2)]">Категорій постачальників: {parsedCategories.length}</span>
+                      </div>
                     </div>
                     
                     {!parsedCategories.length ? (
