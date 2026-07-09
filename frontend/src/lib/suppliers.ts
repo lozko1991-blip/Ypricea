@@ -18,7 +18,7 @@ export const YAVSHOKE: SupplierInfo = {
 
 export const MASTEREVA_DEFAULT: SupplierInfo = {
   key: 'ev_kievopt',
-  label: 'Mastereva · KievOpt',
+  label: 'KievOpt',
   short: 'KO',
   color: '#64748b',
   bg: '#e2e8f0',
@@ -26,20 +26,20 @@ export const MASTEREVA_DEFAULT: SupplierInfo = {
 };
 
 export const MASTEREVA_SUPPLIERS: SupplierInfo[] = [
-  { key: 'ev_dropt',      label: 'Mastereva · Dropt',      short: 'DO', color: '#84cc16', bg: '#f7fee7', text: '#3f6212' },
-  { key: 'ev_forus',      label: 'Mastereva · Forus',      short: 'FO', color: '#14b8a6', bg: '#f0fdfa', text: '#134e4a' },
-  { key: 'ev_shkatulka',  label: 'Mastereva · Shkatulka',  short: 'SH', color: '#f59e0b', bg: '#fef3c7', text: '#b45309' },
-  { key: 'ev_optdrop',    label: 'Mastereva · Opt-Drop',   short: 'OD', color: '#8b5cf6', bg: '#ede9fe', text: '#6d28d9' },
-  { key: 'ev_lugi',       label: 'Mastereva · Lugi',       short: 'LU', color: '#ec4899', bg: '#fce7f3', text: '#be185d' },
-  { key: 'ev_dropom',     label: 'Mastereva · Dropom',     short: 'DR', color: '#10b981', bg: '#d1fae5', text: '#047857' },
-  { key: 'ev_royaltoys',  label: 'Mastereva · RoyalToys',  short: 'RT', color: '#ef4444', bg: '#fee2e2', text: '#b91c1c' },
-  { key: 'ev_posudograd', label: 'Mastereva · Posudograd', short: 'PS', color: '#f97316', bg: '#fff7ed', text: '#9a3412' },
-  { key: 'ev_iposud',     label: 'Mastereva · i-Posud',    short: 'IP', color: '#06b6d4', bg: '#ecfeff', text: '#164e63' },
-  { key: 'ev_iposud2',    label: 'Iposud2',                short: 'IP2', color: '#0891b2', bg: '#ecfeff', text: '#155e75' },
-  { key: 'ev_websklad',   label: 'Mastereva · Websklad',   short: 'WS', color: '#6366f1', bg: '#eef2ff', text: '#3730a3' },
-  { key: 'ev_ager',       label: 'AGER',                   short: 'AG', color: '#059669', bg: '#d1fae5', text: '#065f46' },
-  { key: 'ev_issa',       label: 'ISSA Plus',              short: 'IS', color: '#d946ef', bg: '#fdf4ff', text: '#701a75' },
-  { key: 'ev_draap',      label: 'Draap',                  short: 'DP', color: '#ea580c', bg: '#fff7ed', text: '#7c2d12' },
+  { key: 'ev_dropt',      label: 'Dropt',      short: 'DO', color: '#84cc16', bg: '#f7fee7', text: '#3f6212' },
+  { key: 'ev_forus',      label: 'Forus',      short: 'FO', color: '#14b8a6', bg: '#f0fdfa', text: '#134e4a' },
+  { key: 'ev_shkatulka',  label: 'Shkatulka',  short: 'SH', color: '#f59e0b', bg: '#fef3c7', text: '#b45309' },
+  { key: 'ev_optdrop',    label: 'Opt-Drop',   short: 'OD', color: '#8b5cf6', bg: '#ede9fe', text: '#6d28d9' },
+  { key: 'ev_lugi',       label: 'Lugi',       short: 'LU', color: '#ec4899', bg: '#fce7f3', text: '#be185d' },
+  { key: 'ev_dropom',     label: 'Dropom',     short: 'DR', color: '#10b981', bg: '#d1fae5', text: '#047857' },
+  { key: 'ev_royaltoys',  label: 'RoyalToys',  short: 'RT', color: '#ef4444', bg: '#fee2e2', text: '#b91c1c' },
+  { key: 'ev_posudograd', label: 'Posudograd', short: 'PS', color: '#f97316', bg: '#fff7ed', text: '#9a3412' },
+  { key: 'ev_iposud',     label: 'i-Posud',    short: 'IP', color: '#06b6d4', bg: '#ecfeff', text: '#164e63' },
+  { key: 'ev_iposud2',    label: 'Iposud2',    short: 'IP2', color: '#0891b2', bg: '#ecfeff', text: '#155e75' },
+  { key: 'ev_websklad',   label: 'Websklad',   short: 'WS', color: '#6366f1', bg: '#eef2ff', text: '#3730a3' },
+  { key: 'ev_ager',       label: 'AGER',       short: 'AG', color: '#059669', bg: '#d1fae5', text: '#065f46' },
+  { key: 'ev_issa',       label: 'ISSA Plus',  short: 'IS', color: '#d946ef', bg: '#fdf4ff', text: '#701a75' },
+  { key: 'ev_draap',      label: 'Draap',      short: 'DP', color: '#ea580c', bg: '#fff7ed', text: '#7c2d12' },
 ];
 
 const BY_KEY: Record<string, SupplierInfo> = {

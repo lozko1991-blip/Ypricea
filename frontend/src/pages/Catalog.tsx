@@ -161,6 +161,7 @@ export default function Catalog() {
   const [data, setData] = useState<IndexData | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [productsLoading, setProductsLoading] = useState(true);
 
   // Pre-compiled search strings map for all products
   const searchStrings = useMemo(() => {
@@ -201,23 +202,30 @@ export default function Catalog() {
   // Fetch initial lightweight index and categories
   useEffect(() => {
     const fetchData = async () => {
+      // 1. Fetch categories first to draw layout immediately
       try {
-        const timestamp = Date.now();
-        const [indexRes, catsRes] = await Promise.all([
-          fetch(`${import.meta.env.BASE_URL}data/index.json?_=${timestamp}`),
-          fetch(`${import.meta.env.BASE_URL}data/categories.json?_=${timestamp}`)
-        ]);
-
-        if (indexRes.ok && catsRes.ok) {
-          const indexJson = await indexRes.json();
+        const catsRes = await fetch(`${import.meta.env.BASE_URL}data/categories.json`);
+        if (catsRes.ok) {
           const catsJson = await catsRes.json();
-          setData(indexJson);
           setCategories(catsJson.categories || []);
         }
       } catch (e) {
-        console.error('Failed to load catalog data', e);
+        console.error('Failed to load categories', e);
       } finally {
         setLoading(false);
+      }
+
+      // 2. Fetch lightweight search index in background (allows browser caching)
+      try {
+        const indexRes = await fetch(`${import.meta.env.BASE_URL}data/index.json`);
+        if (indexRes.ok) {
+          const indexJson = await indexRes.json();
+          setData(indexJson);
+        }
+      } catch (e) {
+        console.error('Failed to load catalog index', e);
+      } finally {
+        setProductsLoading(false);
       }
     };
     fetchData();
@@ -891,10 +899,6 @@ export default function Catalog() {
     <div className="flex flex-col gap-6">
 
       <div className="flex gap-6 items-start">
-        {/* Leftmost Suppliers Column (Desktop Sidebar 1) */}
-        <aside className="card w-60 shrink-0 hidden lg:flex flex-col sticky top-20 h-[calc(100vh-120px)] overflow-hidden">
-          {renderSuppliersList()}
-        </aside>
 
         {/* Left Categories Tree & Filters (Desktop Sidebar 2) */}
         <aside className="card w-64 shrink-0 hidden lg:flex flex-col gap-4 sticky top-20 h-[calc(100vh-120px)] overflow-hidden">
@@ -987,7 +991,12 @@ export default function Catalog() {
             </div>
           </div>
 
-          {paginatedProducts.length === 0 ? (
+          {productsLoading ? (
+            <div className="card flex flex-col items-center justify-center py-24 text-[var(--text2)]">
+              <Loader2 className="animate-spin mb-4" size={32} />
+              <p className="font-extrabold text-sm">Завантаження товарів...</p>
+            </div>
+          ) : paginatedProducts.length === 0 ? (
             <div className="card flex flex-col items-center justify-center py-24 text-[var(--text2)]">
               <PackageX size={48} className="mb-4 opacity-30" />
               <p className="font-extrabold text-sm">Товарів не знайдено</p>
@@ -1092,6 +1101,11 @@ export default function Catalog() {
             </>
           )}
         </div>
+
+        {/* Rightmost Suppliers Column (Desktop Sidebar 2) */}
+        <aside className="card w-60 shrink-0 hidden lg:flex flex-col sticky top-20 h-[calc(100vh-120px)] overflow-hidden">
+          {renderSuppliersList()}
+        </aside>
       </div>
 
       {/* Mobile Drawer (Sidebar) */}
