@@ -1,5 +1,5 @@
-import React from 'react';
-import { Loader2, PackageX, ChevronRight } from 'lucide-react';
+import React, { useState } from 'react';
+import { Loader2, PackageX, ChevronRight, Edit2, Save } from 'lucide-react';
 import type { Order, OrderItem } from './CabinetTypes';
 
 interface ClientOrdersProps {
@@ -12,14 +12,18 @@ interface ClientOrdersProps {
     processingCount: number;
   };
   ORDER_STATUS_MAP: Record<string, { label: string; bg: string; text: string }>;
+  onUpdateTTN: (id: number, ttn: string) => Promise<void>;
 }
 
 export const ClientOrders: React.FC<ClientOrdersProps> = ({
   orders,
   ordersLoading,
   orderStats,
-  ORDER_STATUS_MAP
+  ORDER_STATUS_MAP,
+  onUpdateTTN
 }) => {
+  const [editingOrderId, setEditingOrderId] = useState<number | null>(null);
+  const [ttnInput, setTtnInput] = useState('');
   return (
     <div className="flex flex-col gap-6">
       {/* Order Stats Dashboard */}
@@ -102,21 +106,59 @@ export const ClientOrders: React.FC<ClientOrdersProps> = ({
                     <span className="text-[var(--text2)]">{items.length} поз.</span>
                   </div>
 
-                  {o.ttn && (
+                  {editingOrderId === o.id ? (
+                    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl py-2 px-3 flex items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2 flex-1">
+                        <span className="font-bold text-[var(--text2)] shrink-0">ТТН Нової Пошти:</span>
+                        <input 
+                          type="text" 
+                          value={ttnInput}
+                          onChange={(e) => setTtnInput(e.target.value)}
+                          className="input-field text-xs py-0.5 px-2 tracking-wider font-extrabold w-full"
+                          placeholder="Введіть 14-значний номер ТТН"
+                        />
+                      </div>
+                      <button 
+                        onClick={async () => {
+                          await onUpdateTTN(o.id, ttnInput.trim());
+                          setEditingOrderId(null);
+                        }}
+                        className="gbtn bg-[var(--accent)] text-white text-[10px] font-black py-1 px-3 rounded-lg shrink-0 flex items-center gap-1"
+                      >
+                        <Save size={10} /> Зберегти
+                      </button>
+                    </div>
+                  ) : (
                     <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl py-2 px-3 flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-[var(--text2)]">ТТН Нової Пошти:</span>
-                        <strong className="tracking-wider text-[var(--text)]">{o.ttn}</strong>
+                        <span className="font-bold text-[var(--text2)] font-semibold">ТТН Нової Пошти:</span>
+                        {o.ttn ? (
+                          <strong className="tracking-wider text-[var(--text)]">{o.ttn}</strong>
+                        ) : (
+                          <span className="text-[var(--text2)] italic">Не вказано</span>
+                        )}
+                        <button 
+                          onClick={() => {
+                            setEditingOrderId(o.id);
+                            setTtnInput(o.ttn || '');
+                          }}
+                          className="text-[var(--text2)] hover:text-[var(--text)] transition-colors p-1"
+                          title="Редагувати ТТН"
+                        >
+                          <Edit2 size={10} />
+                        </button>
                       </div>
-                      <a 
-                        href={`https://novaposhta.ua/tracking/?cargo_number=${o.ttn}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[10px] font-black text-[var(--accent)] hover:underline flex items-center gap-0.5 uppercase tracking-wider shrink-0"
-                      >
-                        Відстежити
-                        <ChevronRight size={12} />
-                      </a>
+                      {o.ttn && (
+                        <a 
+                          href={`https://novaposhta.ua/tracking/?cargo_number=${o.ttn}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] font-black text-[var(--accent)] hover:underline flex items-center gap-0.5 uppercase tracking-wider shrink-0"
+                        >
+                          Відстежити
+                          <ChevronRight size={12} />
+                        </a>
+                      )}
                     </div>
                   )}
 

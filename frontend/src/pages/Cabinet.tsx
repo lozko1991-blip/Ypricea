@@ -729,6 +729,20 @@ export default function Cabinet() {
     showToast(ghTokenVal.trim() ? '🔑 Токен GitHub підключено!' : '🔓 Токен видалено');
   };
 
+  const handleUpdateClientTTN = async (orderId: number, ttn: string) => {
+    try {
+      const { error: sbError } = await supabase
+        .from('orders')
+        .update({ ttn })
+        .eq('id', orderId);
+      if (sbError) throw sbError;
+      showToast('✅ ТТН успішно збережено!');
+      fetchOrders();
+    } catch (e: any) {
+      showToast('⚠️ Помилка оновлення ТТН: ' + e.message);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6">
       {/* Toast Alert Banner */}
@@ -845,6 +859,7 @@ export default function Cabinet() {
             ordersLoading={ordersLoading}
             orderStats={orderStats}
             ORDER_STATUS_MAP={ORDER_STATUS_MAP}
+            onUpdateTTN={handleUpdateClientTTN}
           />
         )}
 
