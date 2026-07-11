@@ -259,8 +259,8 @@ export default function Catalog() {
         }
 
         const [shard, descShard] = await Promise.all([
-          loadShard(shardNum),
-          loadDescShard(shardNum)
+          loadShard(shardNum, data?.meta?.updated),
+          loadDescShard(shardNum, data?.meta?.updated)
         ]);
 
         const full = mapGet(shard, selectedProduct.id);
@@ -1010,8 +1010,8 @@ export default function Catalog() {
                         loadShardMap().then(map => {
                           const shardNum = map[p.id];
                           if (shardNum) {
-                            loadShard(shardNum);
-                            loadDescShard(shardNum);
+                            loadShard(shardNum, data?.meta?.updated);
+                            loadDescShard(shardNum, data?.meta?.updated);
                           }
                         }).catch(() => {});
                       }}

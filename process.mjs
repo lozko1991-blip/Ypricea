@@ -90,6 +90,8 @@ const CONFIG = {
     { prefix: '7777', src: 'ev_posudograd' },
     { prefix: '8888', src: 'ev_iposud' },
     { prefix: '9999', src: 'ev_websklad' },
+    { prefix: '1200', src: 'ev_aveopt' },
+    { prefix: '1300', src: 'ev_phantom' },
   ],
   MASTEREVA_DEFAULT_SRC: 'ev_kievopt',
   // Описи Mastereva потрапляють у desc-шарди (а не в основний індекс),
@@ -1421,8 +1423,33 @@ const ME_TMP_XML = 'mastereva.xml';
 
 function masterevaSrc(categoryId) {
   const id = String(categoryId == null ? '' : categoryId);
-  for (const p of CONFIG.MASTEREVA_PREFIXES) if (id.indexOf(p.prefix) === 0) return p.src;
+  for (const p of CONFIG.MASTEREVA_PREFIXES) {
+    if (id.startsWith(p.prefix) && id.length > p.prefix.length) {
+      return p.src;
+    }
+  }
   return CONFIG.MASTEREVA_DEFAULT_SRC;
+}
+
+function masterevaOfferSrc(offerId, categoryId) {
+  const offId = String(offerId || '');
+  const catId = String(categoryId || '');
+  
+  if (offId.startsWith('1000_')) return 'ev_dropt';
+  if (offId.startsWith('1100_')) return 'ev_forus';
+  if (offId.startsWith('1111_')) return 'ev_shkatulka';
+  if (offId.startsWith('2222_')) return 'ev_optdrop';
+  if (offId.startsWith('3333_')) return 'ev_lugi';
+  if (offId.startsWith('4444_')) return 'ev_dropom';
+  if (offId.startsWith('7777_')) return 'ev_posudograd';
+  if (offId.startsWith('8888_')) return 'ev_iposud';
+  if (offId.startsWith('9999_')) return 'ev_websklad';
+  if (offId.startsWith('1200_')) return 'ev_aveopt';
+  if (offId.startsWith('1300_')) return 'ev_phantom';
+  
+  if (catId.startsWith('5555') && catId.length > 4) return 'ev_royaltoys';
+  
+  return 'ev_kievopt';
 }
 
 async function masterevaDownload() {
@@ -1460,7 +1487,7 @@ function masterevaParse() {
         offer = { id: node.attributes.id || '', available: node.attributes.available !== 'false', price: '', catId: '', pics: [], name_ua: '', desc_ua: '', vendor: '', article: '', params: [] };
       } else if (inOffer && n === 'param') {
         curParam = { name: node.attributes.name || '', value: '' };
-      } else if (inOffer && n === 'description_ua') {
+      } else if (inOffer && (n === 'description_ua' || n === 'description')) {
         inDescUa = true; descUaBuf = ''; descDepth = 0;
       }
       tag = n; textBuf = ''; cdataBuf = '';
@@ -1472,7 +1499,7 @@ function masterevaParse() {
     parser.on('closetag', (node) => {
       const n = node.name;
       if (inDescUa) {
-        if (n === 'description_ua') { offer.desc_ua = descUaBuf.trim(); inDescUa = false; }
+        if (n === 'description_ua' || n === 'description') { offer.desc_ua = descUaBuf.trim(); inDescUa = false; }
         else { descUaBuf += `</${n}>`; }
         textBuf = ''; cdataBuf = ''; return;
       }
@@ -1525,7 +1552,7 @@ function masterevaParse() {
         params: o.params || [],
         desc: '',
         desc_ua: '',
-        src: masterevaSrc(o.catId),
+        src: masterevaOfferSrc(o.id, o.catId),
       };
       // Опис іде в окремий desc-шард, тож тут можемо лишати — пам'ять сайту
       // він не їсть. Обрізаємо для захисту від гігантських HTML.

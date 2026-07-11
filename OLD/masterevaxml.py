@@ -24,6 +24,8 @@ SOURCES = [
     ("9999", "9999",  "https://www.websklad.biz.ua/wp-content/uploads/randomize_prom_84230.xml"),
     ("1111", "1111",  "https://www.shkatulka.in.ua/content/export/cb28b41c71e755eab59d094a399ecfd8.xml"),
     ("1100", "1100",  "https://forus.com.ua/vugruzka/forus_opt_prom_stock.xml"),
+    ("1200", "1200",  "https://aveon.net.ua/products_feed.xml?hash_tag=7b71fadcc4a12f03cf26a304da032fba&sales_notes=&product_ids=&label_ids=&exclude_fields=&html_description=0&yandex_cpa=&process_presence_sure=&languages=uk&group_ids="),
+    ("1300", "1300",  "https://sonechko233.com.ua/products_feed.xml?hash_tag=220ed1761695cce1df21b74fc555efcd&sales_notes=&product_ids=&label_ids=&exclude_fields=&html_description=0&yandex_cpa=&process_presence_sure=&languages=uk%2Cru&extra_fields=&group_ids="),
 ]
 
 OLD_PRICE_MULT      = 1.25     # old_price = price × 1.25 для всіх
@@ -88,6 +90,14 @@ CUSTOM_MARKUP = {
         "markup_percent": 1.10, # +10%
         "markup_fixed":   30,   # +30 грн
         "min_price_final": 130, # мінімум від фінальної ціни (після наценки)
+    },
+    "aveon.net.ua": {
+        "markup_percent": 1.25, # +25%
+        "markup_fixed":   40,
+    },
+    "sonechko233.com.ua": {
+        "markup_percent": 1.25, # +25%
+        "markup_fixed":   40,
     },
 }
 

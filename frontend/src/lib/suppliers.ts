@@ -40,6 +40,8 @@ export const MASTEREVA_SUPPLIERS: SupplierInfo[] = [
   { key: 'ev_ager',       label: 'AGER',       short: 'AG', color: '#059669', bg: '#d1fae5', text: '#065f46' },
   { key: 'ev_issa',       label: 'ISSA Plus',  short: 'IS', color: '#d946ef', bg: '#fdf4ff', text: '#701a75' },
   { key: 'ev_draap',      label: 'Draap',      short: 'DP', color: '#ea580c', bg: '#fff7ed', text: '#7c2d12' },
+  { key: 'ev_aveopt',     label: 'Aveopt',     short: 'AV', color: '#f43f5e', bg: '#fff1f2', text: '#9f1239' },
+  { key: 'ev_phantom',    label: 'Phantom',    short: 'PH', color: '#a855f7', bg: '#faf5ff', text: '#6b21a8' },
 ];
 
 const BY_KEY: Record<string, SupplierInfo> = {

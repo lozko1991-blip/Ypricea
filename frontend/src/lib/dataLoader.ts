@@ -62,12 +62,12 @@ export async function loadShardMap(): Promise<Record<string, number>> {
   return shardMapPending;
 }
 
-export async function loadShard(num: number): Promise<Map<string, any>> {
+export async function loadShard(num: number, version?: string): Promise<Map<string, any>> {
   if (shardCache[num]) return shardCache[num];
   if (shardPending[num]) return shardPending[num];
 
   const shardStr = String(num).padStart(4, '0');
-  const url = `${BASE_URL}data/shards/p-${shardStr}.json.gz`;
+  const url = `${BASE_URL}data/shards/p-${shardStr}.json.gz${version ? '?v=' + encodeURIComponent(version) : ''}`;
 
   shardPending[num] = (async () => {
     try {
@@ -94,12 +94,12 @@ export async function loadShard(num: number): Promise<Map<string, any>> {
   return shardPending[num];
 }
 
-export async function loadDescShard(num: number): Promise<Map<string, any>> {
+export async function loadDescShard(num: number, version?: string): Promise<Map<string, any>> {
   if (descCache[num]) return descCache[num];
   if (descPending[num]) return descPending[num];
 
   const shardStr = String(num).padStart(4, '0');
-  const url = `${BASE_URL}data/desc/d-${shardStr}.json.gz`;
+  const url = `${BASE_URL}data/desc/d-${shardStr}.json.gz${version ? '?v=' + encodeURIComponent(version) : ''}`;
 
   descPending[num] = (async () => {
     try {
