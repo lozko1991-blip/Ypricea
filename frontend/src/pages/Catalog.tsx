@@ -386,16 +386,18 @@ export default function Catalog() {
     return allSuppliers.filter(s => (supplierCounts[s.key] || 0) > 0);
   }, [supplierCounts]);
 
-  // Dynamically calculate category product counts for the active supplier
+  // Dynamically calculate category product counts for the active supplier and brand
   const categoryStats = useMemo(() => {
     const direct: Record<string, number> = {};
     const total: Record<string, number> = {};
     
     if (!data || !categories.length) return { direct, total };
 
-    // 1. Direct counts for the active supplier
+    // 1. Direct counts for the active supplier and active brand
     data.products.forEach(p => {
-      if (selectedSupplier === 'all' || p.s === selectedSupplier) {
+      const matchSupplier = selectedSupplier === 'all' || p.s === selectedSupplier;
+      const matchBrand = selectedBrand === 'all' || p.b === selectedBrand;
+      if (matchSupplier && matchBrand) {
         direct[p.c] = (direct[p.c] || 0) + 1;
       }
     });
@@ -439,7 +441,7 @@ export default function Catalog() {
     });
 
     return { direct, total };
-  }, [data, categories, selectedSupplier]);
+  }, [data, categories, selectedSupplier, selectedBrand]);
 
   // Set of category IDs that have products (reachable)
   const reachableCategoryIds = useMemo(() => {
@@ -898,9 +900,7 @@ export default function Catalog() {
 
         {/* Left Categories Tree & Filters (Desktop Sidebar 2) */}
         <aside className="card w-56 shrink-0 hidden lg:flex flex-col gap-4 sticky top-20 h-[calc(100vh-120px)] overflow-hidden">
-          {renderSidebarFilters(false)}
-          
-          <div className="border-b border-[var(--border)] pb-2 pt-2">
+          <div className="border-b border-[var(--border)] pb-2">
             <h2 className="text-sm font-black text-[var(--text)]">Категорії</h2>
           </div>
           <div className="relative">
@@ -936,6 +936,10 @@ export default function Catalog() {
               </span>
             </div>
             {renderCategoryTree()}
+          </div>
+
+          <div className="border-t border-[var(--border)] pt-4 mt-auto">
+            {renderSidebarFilters(false)}
           </div>
         </aside>
 
@@ -1115,9 +1119,7 @@ export default function Catalog() {
             </button>
           </div>
 
-          {renderSidebarFilters(true)}
-
-          <div className="border-b border-[var(--border)] pb-2 pt-2">
+          <div className="border-b border-[var(--border)] pb-2">
             <h2 className="text-sm font-black text-[var(--text)]">Категорії</h2>
           </div>
           <div className="relative">
@@ -1153,6 +1155,10 @@ export default function Catalog() {
               </span>
             </div>
             {renderCategoryTree()}
+          </div>
+
+          <div className="border-t border-[var(--border)] pt-4 mt-auto">
+            {renderSidebarFilters(true)}
           </div>
         </div>
       </div>
