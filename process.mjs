@@ -385,7 +385,7 @@ function buildExports({ offersByCat, catById, childrenOf }) {
     if (!offers.length) warn(`Пресет ${name}: 0 товарів за умовами`);
     const xmlOpts = { idPrefix: preset.idPrefix||'', catPrefix: preset.catPrefix||'', addBrand: !!preset.addBrand, defaultBrand: preset.defaultBrand||'', fillParams: !!preset.fillParams };
     fs.writeFileSync(path.join(CONFIG.OUT_DIR, 'exports', name + '.xml'), buildPromXml(offers, catById, xmlOpts));
-    made.push({ name, count: offers.length, url: `${CONFIG.SITE_URL}/exports/${name}.xml` });
+    made.push({ name, count: offers.length, url: `${CONFIG.SITE_URL}/exports/${name}.xml`, updated_at: new Date().toISOString() });
     console.log(`   📦 exports/${name}.xml — ${offers.length} товарів`);
   }
   try {
@@ -455,7 +455,7 @@ function buildMasterevaExports(me) {
     if (!offers.length) warn(`Пресет Mastereva ${name}: 0 товарів за умовами`);
     const xmlOpts = { idPrefix: preset.idPrefix||'', catPrefix: preset.catPrefix||'', addBrand: !!preset.addBrand, defaultBrand: preset.defaultBrand||'', fillParams: !!preset.fillParams };
     fs.writeFileSync(path.join(CONFIG.OUT_DIR, 'exports', name + '.xml'), buildPromXml(offers, catById, xmlOpts));
-    made.push({ name, count: offers.length, url: `${CONFIG.SITE_URL}/exports/${name}.xml`, src: 'mastereva' });
+    made.push({ name, count: offers.length, url: `${CONFIG.SITE_URL}/exports/${name}.xml`, src: 'mastereva', updated_at: new Date().toISOString() });
     console.log(`   📦 exports/${name}.xml — ${offers.length} товарів (Mastereva)`);
   }
   try {

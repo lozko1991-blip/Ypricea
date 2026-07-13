@@ -162,6 +162,9 @@ interface ClientFeedsProps {
   ghTokenVal: string;
   user: any;
   showToast: (msg: string) => void;
+  exportsList?: any[];
+  workflowStatus?: { status: string | null; conclusion: string | null; updated_at: string | null };
+  onRefreshWorkflow?: () => Promise<void>;
 }
 
 export const ClientFeeds: React.FC<ClientFeedsProps> = ({
@@ -172,7 +175,10 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
   savingFeed,
   ghTokenVal,
   user,
-  showToast
+  showToast,
+  exportsList = [],
+  workflowStatus,
+  onRefreshWorkflow
 }) => {
   const [isEditingFeed, setIsEditingFeed] = useState(false);
   const [selectedFeed, setSelectedFeed] = useState<CustomFeed | null>(null);
@@ -490,26 +496,77 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                   <tr className="border-b border-[var(--border)] text-[var(--text2)] uppercase text-[10px]">
                     <th className="py-2.5 px-3">Назва фіду</th>
                     <th className="py-2.5 px-3">Формат</th>
-                    <th className="py-2.5 px-3">Посилання на фід (XML)</th>
+                    <th className="py-2.5 px-3">Товарів</th>
+                    <th className="py-2.5 px-3">Оновлено</th>
+                    <th className="py-2.5 px-3">Посилання (XML)</th>
                     <th className="py-2.5 px-3 text-right">Дії</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border)]">
                   {customFeeds.map((feed) => {
                     const downloadUrl = `https://lozko1991-blip.github.io/Ypricea/exports/${feed.name}.xml`;
+                    // find manifest data for this feed
+                    const manifest = exportsList.find((e: any) => e.name === feed.name || e.token === feed.token);
+                    const updatedAt = manifest?.updated_at
+                      ? new Date(manifest.updated_at).toLocaleString('uk-UA', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' })
+                      : feed.updated_at
+                        ? new Date(feed.updated_at).toLocaleString('uk-UA', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' })
+                        : '—';
+                    const productCount = manifest?.count ?? null;
+                    const isRunning = workflowStatus?.status === 'in_progress' || workflowStatus?.status === 'queued';
                     return (
-                      <tr key={feed.token} className="hover:bg-[var(--surface2)]/50">
-                        <td className="py-3 px-3 font-extrabold text-[var(--text)]">{feed.name}</td>
+                      <tr key={feed.token} className={`hover:bg-[var(--surface2)]/50 ${feed.emergency_stock_zero ? 'bg-red-500/5' : ''}`}>
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-1.5">
+                            {feed.emergency_stock_zero && (
+                              <AlertOctagon size={11} className="text-red-500 animate-pulse shrink-0" />
+                            )}
+                            <span className="font-extrabold text-[var(--text)]">{feed.name}</span>
+                          </div>
+                          {feed.emergency_stock_zero && (
+                            <span className="text-[9px] text-red-500 font-black">● АВАРІЙНИЙ РЕЖИМ</span>
+                          )}
+                        </td>
                         <td className="py-3 px-3 uppercase text-[10px] text-[var(--text2)] font-black">{feed.format || 'prom'}</td>
+                        <td className="py-3 px-3">
+                          {isRunning ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-blue-500 font-black bg-blue-50 dark:bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full">
+                              <Loader2 size={9} className="animate-spin" />
+                              Оновлюється...
+                            </span>
+                          ) : productCount !== null ? (
+                            <span className="text-[var(--text)] font-extrabold">{productCount.toLocaleString('uk-UA')}</span>
+                          ) : (
+                            <span className="text-[var(--text2)]">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-1">
+                            {isRunning ? (
+                              <span className="text-[10px] text-blue-500 font-semibold">В процесі...</span>
+                            ) : workflowStatus?.conclusion === 'failure' && updatedAt !== '—' ? (
+                              <span className="text-[10px] text-red-500 font-semibold" title="Помилка в останньому оновленні">⚠ {updatedAt}</span>
+                            ) : (
+                              <span className="text-[10px] text-[var(--text2)] font-semibold">{updatedAt}</span>
+                            )}
+                            <button
+                              onClick={() => onRefreshWorkflow?.()}
+                              title="Перевірити статус оновлення"
+                              className="p-0.5 hover:text-[var(--accent)] text-[var(--text2)] shrink-0"
+                            >
+                              <Loader2 size={10} className={isRunning ? 'animate-spin text-blue-500' : ''} />
+                            </button>
+                          </div>
+                        </td>
                         <td className="py-3 px-3 text-[var(--text2)]">
-                          <div className="flex items-center gap-1.5 max-w-[280px]">
+                          <div className="flex items-center gap-1.5 max-w-[240px]">
                             <span className="truncate text-[10px] bg-[var(--surface2)] py-1 px-2 rounded-lg border border-[var(--border)]">{downloadUrl}</span>
                             <button 
                               onClick={() => {
                                 navigator.clipboard.writeText(downloadUrl);
                                 showToast("📋 Посилання скопійовано!");
                               }}
-                              className="p-1 hover:text-[var(--accent)]"
+                              className="p-1 hover:text-[var(--accent)] shrink-0"
                             >
                               <Copy size={12} />
                             </button>

@@ -114,6 +114,51 @@ export default function Cabinet() {
     fetchExports();
   }, []);
 
+  const [workflowStatus, setWorkflowStatus] = useState<{
+    status: string | null;
+    conclusion: string | null;
+    updated_at: string | null;
+  }>({ status: null, conclusion: null, updated_at: null });
+
+  const fetchWorkflowStatus = async () => {
+    const token = localStorage.getItem('utrade_gh_pat') || ghTokenVal;
+    if (!token) return;
+    try {
+      const repoUrl = localStorage.getItem('utrade_gh_repo') || 'https://github.com/lozko1991-blip/Ypricea.git';
+      const cleanUrl = repoUrl.replace('.git', '');
+      const parts = cleanUrl.split('/');
+      const repoName = parts.pop();
+      const repoOwner = parts.pop();
+      if (!repoOwner || !repoName) return;
+
+      const res = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/actions/runs?per_page=1`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github+json'
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.workflow_runs && data.workflow_runs.length > 0) {
+          const run = data.workflow_runs[0];
+          setWorkflowStatus({
+            status: run.status, // queued, in_progress, completed
+            conclusion: run.conclusion, // success, failure, etc.
+            updated_at: run.updated_at
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Failed checking GitHub workflow status', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchWorkflowStatus();
+    const interval = setInterval(fetchWorkflowStatus, 20000);
+    return () => clearInterval(interval);
+  }, [ghTokenVal]);
+
   // Fetch customer orders from Supabase
   const fetchOrders = async () => {
     if (!user) return;
@@ -852,6 +897,9 @@ export default function Cabinet() {
             ghTokenVal={ghTokenVal}
             user={user}
             showToast={showToast}
+            exportsList={exportsList}
+            workflowStatus={workflowStatus}
+            onRefreshWorkflow={fetchWorkflowStatus}
           />
         )}
 
@@ -928,6 +976,7 @@ export default function Cabinet() {
             setGhTokenVal={setGhTokenVal}
             onSaveGhToken={handleSaveGhToken}
             showToast={showToast}
+            workflowStatus={workflowStatus}
           />
         )}
       </div>

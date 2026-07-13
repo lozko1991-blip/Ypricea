@@ -914,7 +914,7 @@ export async function buildUserCustomExports() {
     fs.writeFileSync(outPath, xmlContent);
 
     const count = promOffers.length;
-    made.push({ name, count, url: `${CONFIG.SITE_URL}/exports/${name}.xml`, token });
+    made.push({ name, count, url: `${CONFIG.SITE_URL}/exports/${name}.xml`, token, updated_at: new Date().toISOString() });
     console.log(`   📦 exports/${name}.xml — ${count} товарів (Користувацький фід)`);
   }
 

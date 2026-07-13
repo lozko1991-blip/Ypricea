@@ -63,6 +63,7 @@ interface AdminCabinetProps {
   setGhTokenVal: (val: string) => void;
   onSaveGhToken: () => void;
   showToast: (msg: string) => void;
+  workflowStatus?: { status: string | null; conclusion: string | null; updated_at: string | null };
 }
 
 export const AdminCabinet: React.FC<AdminCabinetProps> = ({
@@ -110,7 +111,8 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
   ghTokenVal,
   setGhTokenVal,
   onSaveGhToken,
-  showToast
+  showToast,
+  workflowStatus
 }) => {
   // Sub-Tab Navigation for Admin view
   const [adminActiveSubTab, setAdminActiveSubTab] = useState<'users' | 'analytics' | 'logs' | 'settings' | 'catalog' | 'invoices'>('users');
@@ -1449,23 +1451,61 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
                     </div>
 
                     <div className="p-4 bg-[var(--surface2)] border border-[var(--border)] rounded-2xl flex flex-col gap-2.5 text-xs font-bold">
-                      <div className="flex justify-between items-center text-[var(--text2)] text-[10px] border-b border-[var(--border)] pb-2">
-                        <span>Назва джерела XML</span>
-                        <span>Посилання</span>
-                      </div>
-                      {exportsList.map(e => (
-                        <div key={e.name} className="flex justify-between items-center flex-wrap gap-2 text-xs font-semibold py-1">
-                          <span className="font-extrabold text-[var(--text)]">{e.name}</span>
-                          <a 
-                            href={`exports/${e.name}.xml`} 
-                            target="_blank" 
-                            rel="noreferrer"
-                            className="text-blue-500 text-[10px] hover:underline truncate max-w-[300px]"
-                          >
-                            /exports/{e.name}.xml ↗
-                          </a>
+                      {/* Workflow progress banner */}
+                      {(workflowStatus?.status === 'in_progress' || workflowStatus?.status === 'queued') && (
+                        <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-xl px-3 py-2 text-blue-500 text-[10px] font-black">
+                          <Loader2 size={12} className="animate-spin shrink-0" />
+                          Генерація XML-прайсів в процесі на GitHub Actions...
                         </div>
-                      ))}
+                      )}
+                      {workflowStatus?.conclusion === 'failure' && (
+                        <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2 text-red-500 text-[10px] font-black">
+                          ⚠️ Остання генерація завершилась з помилкою
+                        </div>
+                      )}
+                      {workflowStatus?.conclusion === 'success' && workflowStatus?.updated_at && (
+                        <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3 py-2 text-emerald-600 text-[10px] font-black">
+                          ✅ Успішно оновлено: {new Date(workflowStatus.updated_at).toLocaleString('uk-UA', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' })}
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center text-[var(--text2)] text-[10px] border-b border-[var(--border)] pb-2">
+                        <span>Прайс</span>
+                        <div className="flex gap-8">
+                          <span>Товарів</span>
+                          <span>Оновлено</span>
+                          <span>Посилання</span>
+                        </div>
+                      </div>
+                      {exportsList.map(e => {
+                        const isRunning = workflowStatus?.status === 'in_progress' || workflowStatus?.status === 'queued';
+                        const updatedAt = e.updated_at
+                          ? new Date(e.updated_at).toLocaleString('uk-UA', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' })
+                          : '—';
+                        return (
+                          <div key={e.name} className="flex justify-between items-center flex-wrap gap-2 text-xs font-semibold py-1">
+                            <span className="font-extrabold text-[var(--text)]">{e.name}</span>
+                            <div className="flex items-center gap-6 text-[10px]">
+                              {isRunning ? (
+                                <span className="inline-flex items-center gap-1 text-blue-500 font-black">
+                                  <Loader2 size={9} className="animate-spin" />
+                                  Оновлюється...
+                                </span>
+                              ) : (
+                                <span className="text-emerald-600 font-black">{e.count?.toLocaleString('uk-UA') ?? '—'} шт.</span>
+                              )}
+                              <span className="text-[var(--text2)]">{isRunning ? 'В процесі...' : updatedAt}</span>
+                              <a 
+                                href={`exports/${e.name}.xml`} 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="text-blue-500 hover:underline truncate max-w-[200px]"
+                              >
+                                /exports/{e.name}.xml ↗
+                              </a>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
