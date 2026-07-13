@@ -181,6 +181,7 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
   const [activeRowSuggestions, setActiveRowSuggestions] = useState<string | null>(null);
   const [suggestionSearchQuery, setSuggestionSearchQuery] = useState('');
   const [activeRuleTab, setActiveRuleTab] = useState<'markup' | 'filter' | 'mapping' | 'other'>('markup');
+  const [mappingFilter, setMappingFilter] = useState<'all' | 'unmapped' | 'mapped'>('all');
 
   useEffect(() => {
     if (isEditingFeed && activeRuleTab === 'mapping') {
@@ -282,6 +283,30 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
         setParsedCategories([]);
       }
     }
+  };
+
+  const filteredCategories = parsedCategories.filter(cat => {
+    const isMapped = !!feedCatMapping[cat.id]?.id;
+    if (mappingFilter === 'unmapped') return !isMapped;
+    if (mappingFilter === 'mapped') return isMapped;
+    return true;
+  });
+
+  const handleMapSelect = (origFullId: string, targetId: string, targetName: string) => {
+    setFeedCatMapping(prev => ({
+      ...prev,
+      [origFullId]: { id: targetId, name: targetName }
+    }));
+
+    // Auto-advance suggestions to the next row in our current filteredCategories view
+    const currentIndex = filteredCategories.findIndex(c => c.id === origFullId);
+    if (currentIndex !== -1 && currentIndex < filteredCategories.length - 1) {
+      const nextCat = filteredCategories[currentIndex + 1];
+      setActiveRowSuggestions(nextCat.id);
+    } else {
+      setActiveRowSuggestions(null);
+    }
+    setSuggestionSearchQuery('');
   };
 
   const handleClientAutoMap = () => {
@@ -867,14 +892,43 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                         <span className="text-[10px] font-bold text-[var(--text2)]">Категорій постачальників: {parsedCategories.length}</span>
                       </div>
                     </div>
+
+                    {/* Categories Filter Tabs for Super Fast Matching */}
+                    {parsedCategories.length > 0 && (
+                      <div className="flex gap-1 bg-[var(--surface2)]/60 p-1 rounded-xl border border-[var(--border)] max-w-sm text-[10px] font-bold mt-2">
+                        <button 
+                          type="button"
+                          onClick={() => setMappingFilter('all')}
+                          className={`px-3 py-1 rounded-lg font-black transition-all ${mappingFilter === 'all' ? 'bg-purple-600 text-white shadow shadow-purple-600/10' : 'text-[var(--text2)] hover:text-[var(--text)]'}`}
+                        >
+                          Всі ({parsedCategories.length})
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => setMappingFilter('unmapped')}
+                          className={`px-3 py-1 rounded-lg font-black transition-all ${mappingFilter === 'unmapped' ? 'bg-orange-600 text-white shadow shadow-orange-600/10' : 'text-[var(--text2)] hover:text-[var(--text)]'}`}
+                        >
+                          Не співставлені ({parsedCategories.filter(c => !feedCatMapping[c.id]?.id).length})
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => setMappingFilter('mapped')}
+                          className={`px-3 py-1 rounded-lg font-black transition-all ${mappingFilter === 'mapped' ? 'bg-green-600 text-white shadow shadow-green-600/10' : 'text-[var(--text2)] hover:text-[var(--text)]'}`}
+                        >
+                          Співставлені ({parsedCategories.filter(c => !!feedCatMapping[c.id]?.id).length})
+                        </button>
+                      </div>
+                    )}
                     
-                    {!parsedCategories.length ? (
+                    {!filteredCategories.length ? (
                       <p className="text-center text-[10px] text-[var(--text2)] py-8 font-semibold">
-                        Категорії ще не зчитано. Додайте джерела прайсів та натисніть кнопку «Зчитати категорії прайсів» зліва.
+                        {parsedCategories.length 
+                          ? 'Немає категорій, що відповідають вибраному фільтру.' 
+                          : 'Категорії ще не зчитано. Додайте джерела прайсів та натисніть кнопку «Зчитати категорії прайсів» зліва.'}
                       </p>
                     ) : (
                       <div className="flex flex-col gap-2 max-h-96 overflow-y-auto pr-1 noscroll border border-[var(--border)] p-3 rounded-2xl bg-[var(--surface2)]/20">
-                        {parsedCategories.map((cat) => {
+                        {filteredCategories.map((cat) => {
                           const origFullId = cat.id;
                           const currentMap = feedCatMapping[origFullId] || { id: '', name: '' };
                           const isShowingSuggestions = activeRowSuggestions === origFullId;
@@ -885,7 +939,13 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                                 <div className="md:col-span-2 min-w-0">
                                   <span className="inline-block px-1 py-0.5 rounded bg-[var(--surface2)] border border-[var(--border)] text-[var(--text2)] text-[9px] mr-1.5 font-bold uppercase truncate max-w-[80px]">{cat.srcName}</span>
                                   <span className="text-[var(--text)] font-extrabold">{cat.name}</span>
-                                  <span className="block text-[var(--text2)] text-[9px]">ID: {cat.id}</span>
+                                  <span className="block text-[var(--text2)] text-[9px] mt-0.5">
+                                    ID: {cat.id} • {currentMap.id ? (
+                                      <span className="text-green-500 font-extrabold uppercase text-[8px] bg-green-500/10 px-1 py-0.5 rounded ml-1">✓ Співставлено</span>
+                                    ) : (
+                                      <span className="text-orange-500 font-extrabold uppercase text-[8px] bg-orange-500/10 px-1 py-0.5 rounded ml-1">⚠️ Потрібен вибір</span>
+                                    )}
+                                  </span>
                                 </div>
                                 <div className="md:col-span-3 flex gap-2 items-center">
                                   <input 
@@ -978,11 +1038,7 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                                             type="button"
                                             key={rec.id}
                                             onClick={() => {
-                                              setFeedCatMapping({
-                                                ...feedCatMapping,
-                                                [origFullId]: { id: rec.id, name: rec.name }
-                                              });
-                                              setActiveRowSuggestions(null);
+                                              handleMapSelect(origFullId, rec.id, rec.name);
                                             }}
                                             className="w-full text-left p-1.5 hover:bg-[var(--surface)] border border-[var(--border)] rounded text-[10px] flex justify-between items-center transition-all hover:border-purple-500/30"
                                           >
@@ -1025,11 +1081,7 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                                               type="button"
                                               key={res.id}
                                               onClick={() => {
-                                                setFeedCatMapping({
-                                                  ...feedCatMapping,
-                                                  [origFullId]: { id: res.id, name: res.name }
-                                                });
-                                                setActiveRowSuggestions(null);
+                                                handleMapSelect(origFullId, res.id, res.name);
                                               }}
                                               className="w-full text-left p-1.5 hover:bg-[var(--surface-hover)] text-[10px] border-b border-[var(--border)] last:border-b-0 flex justify-between items-center transition-all"
                                             >
