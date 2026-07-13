@@ -698,18 +698,23 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
         finalPrice: Math.max(1, Math.round(p.pr * (1 + pct / 100) + grn))
       }));
 
+      // Use only supplier-specific categories for XML generation
+      const srcCats = categories.filter(c =>
+        type === 'yavshoke' ? c.src === 'yavshoke' : c.src === 'mastereva'
+      );
+
       const catById: Record<string, any> = {};
-      categories.forEach(c => { catById[c.id] = c; });
+      srcCats.forEach(c => { catById[c.id] = c; });
       const pfxCats = new Map<string, string>();
       const catPrefix = type === 'yavshoke' ? yavCatPrefix : meCatPrefix;
 
       const usedCats = new Set<string>();
       offers.forEach(o => {
         usedCats.add(String(o.c));
-        getAncestors(String(o.c), categories).forEach(a => usedCats.add(String(a.id)));
+        getAncestors(String(o.c), srcCats).forEach(a => usedCats.add(String(a.id)));
       });
 
-      categories.filter(c => usedCats.has(String(c.id))).forEach(c => {
+      srcCats.filter(c => usedCats.has(String(c.id))).forEach(c => {
         pfxCats.set(String(c.id), catPrefix + String(c.id));
       });
 
