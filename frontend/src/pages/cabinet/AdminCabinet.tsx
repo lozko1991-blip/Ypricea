@@ -221,7 +221,7 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
     if (!selectAll) {
       setter(new Set());
     } else {
-      const filtered = categories.filter(c => type === 'yavshoke' ? (c.src !== 'mastereva') : (c.src === 'mastereva'));
+      const filtered = categories.filter(c => type === 'yavshoke' ? (c.src === 'yavshoke') : (c.src === 'mastereva'));
       setter(new Set(filtered.map(c => String(c.id))));
     }
   };
@@ -233,7 +233,7 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
     setSelectedSet: React.Dispatch<React.SetStateAction<Set<string>>>,
     searchQuery: string
   ) => {
-    const list = categories.filter(c => type === 'yavshoke' ? (c.src !== 'mastereva') : (c.src === 'mastereva'));
+    const list = categories.filter(c => type === 'yavshoke' ? (c.src === 'yavshoke') : (c.src === 'mastereva'));
     if (!list.length) return null;
 
     const categoryMap = new Map(list.map(c => [String(c.id), c]));
