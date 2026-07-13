@@ -183,6 +183,84 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
   const [isEditingFeed, setIsEditingFeed] = useState(false);
   const [selectedFeed, setSelectedFeed] = useState<CustomFeed | null>(null);
 
+  // Rebuild logs and processing statuses
+  const [rebuildUsages, setRebuildUsages] = useState<Record<string, number>>({});
+  const [rebuildingTokens, setRebuildingTokens] = useState<Record<string, boolean>>({});
+
+  // Fetch daily usage count for user's feeds
+  const fetchRebuildUsages = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('feed_rebuild_requests')
+        .select('feed_token, requested_at')
+        .eq('user_id', user.id)
+        .gte('requested_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+
+      if (error) throw error;
+
+      const counts: Record<string, number> = {};
+      data?.forEach(r => {
+        counts[r.feed_token] = (counts[r.feed_token] || 0) + 1;
+      });
+      setRebuildUsages(counts);
+    } catch (e: any) {
+      console.warn('Помилка отримання лімітів оновлень:', e.message);
+    }
+  };
+
+  useEffect(() => {
+    fetchRebuildUsages();
+    // Refresh limits every 30 seconds
+    const interval = setInterval(fetchRebuildUsages, 30000);
+    return () => clearInterval(interval);
+  }, [user, customFeeds]);
+
+  // Request instant trigger via Supabase Edge Function
+  const handleRequestManualRebuild = async (feedToken: string, feedName: string) => {
+    const currentUsage = rebuildUsages[feedToken] || 0;
+    if (currentUsage >= 3) {
+      showToast('⚠️ Ви вичерпали ліміт примусових оновлень (макс. 3 на добу) для цього фіду.');
+      return;
+    }
+
+    if (!confirm(`🔄 Запустити примусове оновлення фіду "${feedName}"?\nЦе використає 1 з 3 доступних оновлень на добу. Процес триває 5-10 хвилин.`)) {
+      return;
+    }
+
+    setRebuildingTokens(prev => ({ ...prev, [feedToken]: true }));
+    try {
+      // Get the current session to pass auth header
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rebuild-feed`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`,
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY
+          },
+          body: JSON.stringify({ feedToken, feedName })
+        }
+      );
+
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || `Помилка сервера: ${response.status}`);
+      }
+
+      showToast(`🚀 ${result.message || 'Оновлення запущено!'}`);
+      fetchRebuildUsages();
+      if (onRefreshWorkflow) onRefreshWorkflow();
+    } catch (e: any) {
+      showToast(`⚠️ Помилка запуску: ${e.message}`);
+    } finally {
+      setRebuildingTokens(prev => ({ ...prev, [feedToken]: false }));
+    }
+  };
+
   // Local editor states
   const [feedName, setFeedName] = useState('');
   const [feedFormat, setFeedFormat] = useState<'prom' | 'rozetka'>('prom');
@@ -513,7 +591,15 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                         ? new Date(feed.updated_at).toLocaleString('uk-UA', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' })
                         : '—';
                     const productCount = manifest?.count ?? null;
-                    const isRunning = workflowStatus?.status === 'in_progress' || workflowStatus?.status === 'queued';
+                    
+                    // Rebuild and execution statuses
+                    const isGhRunning = workflowStatus?.status === 'in_progress' || workflowStatus?.status === 'queued';
+                    const isDbProcessing = feed.generation_status === 'queued' || feed.generation_status === 'generating';
+                    const isRunning = isGhRunning || isDbProcessing || rebuildingTokens[feed.token];
+                    
+                    const usageCount = rebuildUsages[feed.token] || 0;
+                    const remainingRebuilds = Math.max(0, 3 - usageCount);
+                    
                     return (
                       <tr key={feed.token} className={`hover:bg-[var(--surface2)]/50 ${feed.emergency_stock_zero ? 'bg-red-500/5' : ''}`}>
                         <td className="py-3 px-3">
@@ -522,6 +608,16 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                               <AlertOctagon size={11} className="text-red-500 animate-pulse shrink-0" />
                             )}
                             <span className="font-extrabold text-[var(--text)]">{feed.name}</span>
+                            {isDbProcessing && (
+                              <span className="text-[9px] text-blue-500 bg-blue-50 dark:bg-blue-500/10 px-1.5 py-0.5 rounded font-black animate-pulse">
+                                В черзі на оновлення...
+                              </span>
+                            )}
+                            {feed.generation_status === 'error' && (
+                              <span className="text-[9px] text-red-500 bg-red-50 dark:bg-red-500/10 px-1.5 py-0.5 rounded font-black" title={feed.generation_error || 'Помилка'}>
+                                ⚠ Помилка
+                              </span>
+                            )}
                           </div>
                           {feed.emergency_stock_zero && (
                             <span className="text-[9px] text-red-500 font-black">● АВАРІЙНИЙ РЕЖИМ</span>
@@ -574,6 +670,26 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                         </td>
                         <td className="py-3 px-3 text-right">
                           <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              disabled={isRunning || remainingRebuilds === 0}
+                              onClick={() => handleRequestManualRebuild(feed.token, feed.name)}
+                              className={`gbtn flex items-center gap-1 border py-1 px-2.5 rounded-lg transition-all ${
+                                isRunning
+                                  ? 'opacity-50 cursor-not-allowed border-[var(--border)] text-[var(--text2)]'
+                                  : remainingRebuilds === 0
+                                    ? 'border-gray-300 text-gray-400 bg-gray-50 dark:bg-gray-800/10 cursor-not-allowed'
+                                    : 'border-blue-500/30 text-blue-600 hover:bg-blue-500/5'
+                              }`}
+                              title={
+                                remainingRebuilds === 0
+                                  ? 'Добовий ліміт оновлень вичерпано (0/3)'
+                                  : `Примусово оновити прайс. Залишилось запитів на сьогодні: ${remainingRebuilds}/3`
+                              }
+                            >
+                              <Sparkles size={11} className={isRunning ? 'animate-spin' : ''} />
+                              Оновити зараз ({remainingRebuilds}/3)
+                            </button>
                             <button 
                               type="button"
                               onClick={async () => {
@@ -598,13 +714,13 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                               title={feed.emergency_stock_zero ? "Фід вимкнено. Натисніть, щоб увімкнути знову" : "Встановити наявність товарів: 'немає в наявності', а сток: 0"}
                             >
                               <AlertOctagon size={11} className={feed.emergency_stock_zero ? 'animate-pulse' : ''} />
-                              {feed.emergency_stock_zero ? 'Увімкнути фід' : 'Аварійне вимкнення'}
+                              {feed.emergency_stock_zero ? 'Увімкнути' : 'Аварійка'}
                             </button>
                             <button 
                               onClick={() => handleSelectFeedForEditing(feed)}
                               className="gbtn flex items-center gap-1 border border-[var(--border)] py-1 px-2.5 rounded-lg hover:bg-[var(--surface2)]"
                             >
-                              <Edit3 size={11} />Редагувати
+                              <Edit3 size={11} />
                             </button>
                             <button 
                               onClick={async () => {
@@ -614,7 +730,7 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                               }}
                               className="gbtn flex items-center gap-1 border border-red-500/20 text-red-500 py-1 px-2.5 rounded-lg hover:bg-red-500/5"
                             >
-                              <Trash2 size={11} />Видалити
+                              <Trash2 size={11} />
                             </button>
                           </div>
                         </td>

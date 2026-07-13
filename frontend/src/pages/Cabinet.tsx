@@ -347,6 +347,47 @@ export default function Cabinet() {
     }
   }, [user]);
 
+  // Status Polling: if any feed is generating or queued, poll database statuses every 10 seconds
+  useEffect(() => {
+    if (!user || customFeeds.length === 0) return;
+    
+    const hasActiveGeneration = customFeeds.some(
+      f => f.generation_status === 'queued' || f.generation_status === 'generating'
+    );
+    
+    if (!hasActiveGeneration) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const { data, error } = await supabase
+          .from('user_feeds')
+          .select('token, generation_status, generation_error, last_rebuilt_at')
+          .eq('user_id', user.id);
+          
+        if (error) throw error;
+        
+        if (data) {
+          setCustomFeeds(prev => prev.map(f => {
+            const match = data.find(d => d.token === f.token);
+            if (match) {
+              return {
+                ...f,
+                generation_status: match.generation_status,
+                generation_error: match.generation_error,
+                last_rebuilt_at: match.last_rebuilt_at
+              };
+            }
+            return f;
+          }));
+        }
+      } catch (e) {
+        console.warn('Помилка фонового оновлення статусів фідів:', e);
+      }
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [user, customFeeds]);
+
   // Lazy load categories & index products for generator tab
   useEffect(() => {
     if (activeTab === 'generator' && profile?.role === 'admin' && categories.length === 0) {

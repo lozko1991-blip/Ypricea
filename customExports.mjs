@@ -528,6 +528,32 @@ export async function buildUserCustomExports() {
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const translator = new SupabaseTranslator();
 
+  // Helper to safely update statuses in Supabase via REST API
+  const updateFeedStatus = async (token, status, errorMsg = null) => {
+    if (!supabaseUrl || !supabaseKey) return;
+    try {
+      const url = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/user_feeds?token=eq.${token}`;
+      const body = {
+        generation_status: status,
+        generation_error: errorMsg,
+        last_rebuilt_at: status === 'ready' ? new Date().toISOString() : undefined
+      };
+      
+      await fetch(url, {
+        method: 'PATCH',
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify(body)
+      });
+    } catch (e) {
+      console.warn(`[Supabase Status Update Failed] Token: ${token}, Status: ${status}, Error: ${e.message}`);
+    }
+  };
+
   let presets = [];
   if (supabaseUrl && supabaseKey) {
     console.log('🌐 Зчитуємо користувацькі конфіги з Supabase DB...');
@@ -579,6 +605,10 @@ export async function buildUserCustomExports() {
 
   for (const preset of presets) {
     const token = preset.token;
+    // Mark as generating
+    await updateFeedStatus(token, 'generating');
+    
+    try {
     const name = String(preset.name || token).replace(/[^a-zA-Z0-9_-]/g, '') || 'feed';
     const suppliers = preset.suppliers || [];
     const rules = preset.rules || [];
@@ -916,6 +946,13 @@ export async function buildUserCustomExports() {
     const count = promOffers.length;
     made.push({ name, count, url: `${CONFIG.SITE_URL}/exports/${name}.xml`, token, updated_at: new Date().toISOString() });
     console.log(`   📦 exports/${name}.xml — ${count} товарів (Користувацький фід)`);
+    
+    // Update status to ready in Supabase
+    await updateFeedStatus(token, 'ready');
+    } catch (err) {
+      console.error(`   ⚠️ Не вдалося згенерувати фід "${preset.name || token}":`, err.message);
+      await updateFeedStatus(token, 'error', err.message);
+    }
   }
 
   try {

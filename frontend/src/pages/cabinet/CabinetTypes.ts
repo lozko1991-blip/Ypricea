@@ -98,6 +98,9 @@ export interface CustomFeed {
   rules: FeedRule[];
   category_mapping: Record<string, { id: string; name: string }>;
   emergency_stock_zero?: boolean;
+  generation_status?: 'idle' | 'queued' | 'generating' | 'ready' | 'error';
+  generation_error?: string | null;
+  last_rebuilt_at?: string | null;
   created_at?: string;
   updated_at?: string;
 }
