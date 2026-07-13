@@ -7,9 +7,142 @@ import {
   Copy, 
   Sliders, 
   Loader2, 
-  Save 
+  Save,
+  Sparkles
 } from 'lucide-react';
 import type { CustomFeed, FeedSupplier, FeedRule } from './CabinetTypes';
+
+// Standard Levenshtein distance
+function levenshtein(a: string, b: string): number {
+  const tmp: number[][] = [];
+  let i: number, j: number, alen = a.length, blen = b.length;
+  if (alen === 0) return blen;
+  if (blen === 0) return alen;
+  for (i = 0; i <= alen; i++) tmp[i] = [i];
+  for (j = 0; j <= blen; j++) tmp[0][j] = j;
+  for (i = 1; i <= alen; i++) {
+    for (j = 1; j <= blen; j++) {
+      tmp[i][j] = Math.min(
+        tmp[i - 1][j] + 1,
+        tmp[i][j - 1] + 1,
+        tmp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
+  }
+  return tmp[alen][blen];
+}
+
+const translationDict: Record<string, string> = {
+  'обувь': 'взуття', 'одежда': 'одяг', 'игрушки': 'іграшки', 'игрушка': 'іграшка',
+  'посуда': 'посуд', 'кухня': 'кухня', 'кухонная': 'кухонна', 'кухонной': 'кухонна',
+  'бытовая': 'побутова', 'бытовые': 'побутові', 'техника': 'техніка',
+  'аксессуары': 'аксесуари', 'чехол': 'чохол', 'чехлы': 'чохли',
+  'сумка': 'сумка', 'рюкзак': 'рюкзак', 'часы': 'годинники',
+  'косметика': 'косметика', 'инструмент': 'інструмент', 'инструменты': 'інструменти',
+  'дом': 'дім', 'сад': 'сад', 'авто': 'авто', 'вело': 'вело', 'спорт': 'спорт',
+  'детские': 'дитячі', 'детская': 'дитяча', 'детей': 'дітей', 'детский': 'дитячий',
+  'постельное': 'постільна', 'белье': 'білизна', 'одеяло': 'ковдра',
+  'подушка': 'подушка', 'коврик': 'килимок', 'полотенце': 'рушник',
+  'освещение': 'освітлення', 'лампа': 'лампа', 'люстра': 'люстра',
+  'гирлянда': 'гірлянда', 'электрический': 'електричний', 'электрические': 'електричні',
+  'мелкая': 'дрібна', 'крупная': 'велика', 'пылесос': 'пилосос',
+  'утюг': 'праска', 'fен': 'фен', 'фен': 'фен', 'бритва': 'бритва', 'плойка': 'плойка',
+  'эпилятор': 'епілятор', 'весы': 'ваги', 'кофе': 'кава', 'чай': 'чай',
+  'кофемашина': 'кавомашина', 'кофеварка': 'кавоварка', 'электрочайник': 'електрочайник',
+  'блендер': 'блендер', 'миксер': 'міксер', 'мясорубка': 'м\'ясорубка',
+  'тостер': 'тостер', 'духовка': 'духовка', 'плита': 'плита',
+  'вытяжка': 'витяжка', 'холодильник': 'холодильник', 'телевизор': 'телевізор',
+  'смартфон': 'смартфон', 'телефон': 'телефон', 'планшет': 'планшет',
+  'ноутбук': 'ноутбук', 'наушники': 'навушники', 'колонка': 'колонка',
+  'клавиатура': 'клавіатура', 'мышь': 'мишка', 'кабель': 'кабель',
+  'зарядка': 'зарядка', 'накопитель': 'накопичувач', 'чемодан': 'валізи',
+  'дорожная': 'дорожня', 'зонт': 'парасоля', 'ремень': 'ремінь',
+  'кошелек': 'гаманець', 'портмоне': 'портмоне', 'очки': 'окуляри',
+  'украшения': 'прикраси', 'кольцо': 'кільце', 'серьги': 'сережки',
+  'браслет': 'браслет', 'кулон': 'кулон', 'чашка': 'чашка',
+  'кружка': 'кружка', 'стакан': 'склянка', 'бокал': 'келих',
+  'тарелка': 'тарілка', 'салатник': 'салатник', 'блюдо': 'блюдо',
+  'кастрюля': 'каструля', 'scoreворода': 'сковорідка', 'сковорода': 'сковорідка',
+  'нож': 'ніж', 'вилка': 'вилка', 'ложка': 'ложка', 'чайник': 'чайник',
+  'кофемолка': 'кавомолка', 'термос': 'термос', 'доска': 'дошка',
+  'терка': 'терка', 'сито': 'сито', 'штопор': 'штопор', 'ведро': 'відро',
+  'швабра': 'швабра', 'зеркало': 'дзеркало', 'картина': 'картина',
+  'свеча': 'свічка', 'плед': 'плед', 'покрывало': 'покривало',
+  'наволочка': 'наволочка', 'матрас': 'матрац', 'штора': 'штора',
+  'скатерть': 'скатертина', 'халат': 'халат', 'носки': 'шкарпетки',
+  'колготки': 'колготки', 'трусы': 'труси', 'футболка': 'футболка',
+  'рубашка': 'сорочка', 'платье': 'сукня', 'юбка': 'спідниця',
+  'брюки': 'штани', 'джинсы': 'джинси', 'шорты': 'шорти',
+  'костюм': 'костюм', 'свитер': 'светр', 'куртка': 'куртка',
+  'пальто': 'пальто', 'шапка': 'шапка', 'шарф': 'шарф',
+  'перчатки': 'рукавички', 'кепка': 'кепка', 'панама': 'панама',
+  
+  // Plurals and specific categories
+  'микроволновые': 'мікрохвильові', 'микроволновая': 'мікрохвильова',
+  'пылесосы': 'пилососи', 'утюги': 'праски', 'сушилка': 'сушарка',
+  'сушилки': 'сушарки', 'электродуховка': 'електропіч', 'электродуховки': 'електропечі',
+  'электромясорубка': 'електром\'ясорубка', 'электромясорубки': 'електром\'ясорубки',
+  'электрочайники': 'електрочайники', 'ванночки': 'ванночки',
+  'плойки': 'плойки', 'выпрямители': 'випрямлячі', 'фени': 'фени',
+  'электробритвы': 'електробритви', 'обогреватели': 'обігрівачі',
+  'конвекторы': 'конвектори', 'тепловентиляторы': 'тепловентилятори',
+  'крышки': 'кришки', 'ковши': 'ковші', 'чайники': 'чайники',
+  'прихватки': 'прихватки', 'простыни': 'простирадла', 'пододеяльники': 'підковдри',
+  'одеяла': 'ковдри', 'полотенца': 'рушники'
+};
+
+const stopwords = new Set([
+  'для', 'та', 'і', 'в', 'на', 'и', 'с', 'під', 'по', 'за', 'из', 'от', 'до',
+  'об', 'при', 'у', 'о', 'со', 'же', 'бы', 'ли', 'все', 'для', 'всі', 'все',
+  'или', 'або', 'как', 'як', 'без', 'через'
+]);
+
+function cleanWord(word: string): string {
+  let w = word.toLowerCase();
+  if (translationDict[w]) {
+    w = translationDict[w];
+  }
+  return w
+    .replace(/э/g, 'е')
+    .replace(/и/g, 'і')
+    .replace(/ы/g, 'и')
+    .replace(/ё/g, 'е')
+    .replace(/ь/g, '')
+    .replace(/ъ/g, '')
+    .replace(/й/g, 'й')
+    .replace(/я/g, 'а')
+    .replace(/ю/g, 'у');
+}
+
+function areWordsSimilar(norm1: string, norm2: string): boolean {
+  if (norm1 === norm2) return true;
+  if (norm1.substring(0, 2) !== norm2.substring(0, 2)) return false;
+  
+  const len1 = norm1.length;
+  const len2 = norm2.length;
+  if (len1 > len2) {
+    if (len2 >= 4 && norm1.startsWith(norm2)) return true;
+  } else {
+    if (len1 >= 4 && norm2.startsWith(norm1)) return true;
+  }
+  
+  const dist = levenshtein(norm1, norm2);
+  const minLen = Math.min(len1, len2);
+  
+  if (minLen <= 4 && dist <= 1) return true;
+  if (minLen > 4 && dist <= 2) return true;
+  
+  return false;
+}
+
+function tokenizeAndClean(str: string): string[] {
+  return String(str || '')
+    .toLowerCase()
+    .replace(/[^a-zа-яіїєґ0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length >= 3 && !stopwords.has(w))
+    .map(cleanWord);
+}
 
 interface ClientFeedsProps {
   customFeeds: CustomFeed[];
@@ -45,6 +178,9 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
   // Reference marketplace categories database
   const [marketplaceCategories, setMarketplaceCategories] = useState<{ id: string; name: string }[]>([]);
   const [loadingMktCategories, setLoadingMktCategories] = useState(false);
+  const [activeRowSuggestions, setActiveRowSuggestions] = useState<string | null>(null);
+  const [suggestionSearchQuery, setSuggestionSearchQuery] = useState('');
+  const [activeRuleTab, setActiveRuleTab] = useState<'markup' | 'filter' | 'mapping' | 'other'>('markup');
 
   useEffect(() => {
     if (isEditingFeed && activeRuleTab === 'mapping') {
@@ -70,7 +206,6 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
   // Category parsing states
   const [parsedCategories, setParsedCategories] = useState<any[]>([]);
   const [isParsingXml, setIsParsingXml] = useState(false);
-  const [activeRuleTab, setActiveRuleTab] = useState<'markup' | 'filter' | 'mapping' | 'other'>('markup');
 
   // New Rule Temporary States
   const [newRuleScope, setNewRuleScope] = useState<'global' | 'category' | 'supplier'>('global');
@@ -158,31 +293,17 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
 
     const newMapping = { ...feedCatMapping };
 
-    // Common stopwords to exclude from matching
-    const stopwords = new Set([
-      'для', 'та', 'і', 'в', 'на', 'и', 'с', 'під', 'по', 'за', 'из', 'от', 'до',
-      'об', 'при', 'у', 'о', 'со', 'же', 'бы', 'ли', 'все', 'для', 'всі', 'все'
-    ]);
-
-    const tokenize = (str: string) => {
-      return String(str || '')
-        .toLowerCase()
-        .replace(/[^a-zа-яіїєґ0-9\s]/g, ' ')
-        .split(/\s+/)
-        .filter(w => w.length >= 3 && !stopwords.has(w));
-    };
-
-    // Pre-tokenize marketplace categories for high performance
+    // Pre-tokenize and clean marketplace categories for high performance
     const tokenizedMkt = marketplaceCategories.map(cat => ({
       ...cat,
-      tokens: tokenize(cat.name)
+      tokens: tokenizeAndClean(cat.name)
     }));
 
     let mappedCount = 0;
 
     parsedCategories.forEach(cat => {
       if (!newMapping[cat.id] || !newMapping[cat.id].id) {
-        const srcWords = tokenize(cat.name);
+        const srcWords = tokenizeAndClean(cat.name);
         if (srcWords.length === 0) return;
 
         let bestItem: any = null;
@@ -190,7 +311,13 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
         let bestScore = 0;
 
         for (const target of tokenizedMkt) {
-          const overlap = srcWords.filter(w => target.tokens.includes(w)).length;
+          let overlap = 0;
+          for (const sw of srcWords) {
+            if (target.tokens.some(tw => areWordsSimilar(sw, tw))) {
+              overlap++;
+            }
+          }
+
           if (overlap > 0) {
             const score = overlap / (srcWords.length + target.tokens.length - overlap);
             if (overlap > maxOverlap || (overlap === maxOverlap && score > bestScore)) {
@@ -201,7 +328,7 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
           }
         }
 
-        if (bestItem) {
+        if (bestItem && bestScore >= 0.15) {
           newMapping[cat.id] = { id: bestItem.id, name: bestItem.name };
           mappedCount++;
         }
@@ -723,10 +850,18 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                       <div className="flex items-center gap-3">
                         {parsedCategories.length > 0 && (
                           <button 
+                            disabled={loadingMktCategories}
                             onClick={handleClientAutoMap}
-                            className="gbtn border border-[var(--accent)] text-[var(--accent)] text-[9px] font-black py-1 px-3.5 rounded-lg hover:bg-[var(--accent)] hover:text-white transition-all"
+                            className="gbtn border border-[var(--accent)] text-[var(--accent)] text-[9px] font-black py-1 px-3.5 rounded-lg hover:bg-[var(--accent)] hover:text-white transition-all flex items-center gap-1.5"
                           >
-                            🪄 Автомапінг (Fuzzy)
+                            {loadingMktCategories ? (
+                              <>
+                                <Loader2 className="animate-spin" size={10} />
+                                Завантаження бази...
+                              </>
+                            ) : (
+                              '🪄 Автомапінг (Fuzzy)'
+                            )}
                           </button>
                         )}
                         <span className="text-[10px] font-bold text-[var(--text2)]">Категорій постачальників: {parsedCategories.length}</span>
@@ -742,45 +877,172 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                         {parsedCategories.map((cat) => {
                           const origFullId = cat.id;
                           const currentMap = feedCatMapping[origFullId] || { id: '', name: '' };
+                          const isShowingSuggestions = activeRowSuggestions === origFullId;
+                          
                           return (
-                            <div key={origFullId} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2 items-center bg-[var(--surface)] border border-[var(--border)] p-2.5 rounded-xl text-[10px] font-bold">
-                              <div className="md:col-span-2 min-w-0">
-                                <span className="inline-block px-1 py-0.5 rounded bg-[var(--surface2)] border border-[var(--border)] text-[var(--text2)] text-[9px] mr-1.5 font-bold uppercase truncate max-w-[80px]">{cat.srcName}</span>
-                                <span className="text-[var(--text)] font-extrabold">{cat.name}</span>
-                                <span className="block text-[var(--text2)] text-[9px]">ID: {cat.id}</span>
+                            <div key={origFullId} className="flex flex-col gap-2 p-3 bg-[var(--surface)] border border-[var(--border)] rounded-xl text-[10px] font-bold transition-all hover:border-[var(--border-hover)]">
+                              <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-center">
+                                <div className="md:col-span-2 min-w-0">
+                                  <span className="inline-block px-1 py-0.5 rounded bg-[var(--surface2)] border border-[var(--border)] text-[var(--text2)] text-[9px] mr-1.5 font-bold uppercase truncate max-w-[80px]">{cat.srcName}</span>
+                                  <span className="text-[var(--text)] font-extrabold">{cat.name}</span>
+                                  <span className="block text-[var(--text2)] text-[9px]">ID: {cat.id}</span>
+                                </div>
+                                <div className="md:col-span-3 flex gap-2 items-center">
+                                  <input 
+                                    type="text" 
+                                    placeholder="ID"
+                                    value={currentMap.id}
+                                    onChange={(e) => {
+                                      setFeedCatMapping({
+                                        ...feedCatMapping,
+                                        [origFullId]: { ...currentMap, id: e.target.value }
+                                      });
+                                    }}
+                                    className="input-field text-[10px] py-1.5 px-2 w-[70px] text-center"
+                                  />
+                                  <input 
+                                    type="text" 
+                                    list="mkt-cats-list"
+                                    placeholder="Цільова Назва 🔍"
+                                    value={currentMap.name}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      const found = marketplaceCategories.find(c => c.name === val);
+                                      setFeedCatMapping({
+                                        ...feedCatMapping,
+                                        [origFullId]: { 
+                                          id: found ? found.id : currentMap.id, 
+                                          name: val 
+                                        }
+                                      });
+                                    }}
+                                    className="input-field text-[10px] py-1.5 px-2 flex-1"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveRowSuggestions(isShowingSuggestions ? null : origFullId);
+                                      setSuggestionSearchQuery('');
+                                    }}
+                                    className={`p-1.5 rounded-lg border transition-all flex items-center justify-center ${
+                                      isShowingSuggestions 
+                                        ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-600/20' 
+                                        : 'bg-[var(--surface2)] border-[var(--border)] text-[var(--text2)] hover:text-[var(--text)] hover:border-[var(--border-hover)]'
+                                    }`}
+                                    title="Підібрати категорію з бази"
+                                  >
+                                    <Sparkles size={12} className={isShowingSuggestions ? 'animate-pulse' : ''} />
+                                  </button>
+                                </div>
                               </div>
-                              <div className="md:col-span-3 grid grid-cols-2 gap-2">
-                                <input 
-                                  type="text" 
-                                  placeholder="Цільовий ID"
-                                  value={currentMap.id}
-                                  onChange={(e) => {
-                                    setFeedCatMapping({
-                                      ...feedCatMapping,
-                                      [origFullId]: { ...currentMap, id: e.target.value }
-                                    });
-                                  }}
-                                  className="input-field text-[10px] py-1 px-2 w-full"
-                                />
-                                <input 
-                                  type="text" 
-                                  list="mkt-cats-list"
-                                  placeholder="Цільова Назва 🔍"
-                                  value={currentMap.name}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    const found = marketplaceCategories.find(c => c.name === val);
-                                    setFeedCatMapping({
-                                      ...feedCatMapping,
-                                      [origFullId]: { 
-                                        id: found ? found.id : currentMap.id, 
-                                        name: val 
-                                      }
-                                    });
-                                  }}
-                                  className="input-field text-[10px] py-1 px-2 w-full"
-                                />
-                              </div>
+
+                              {/* Suggestions Box */}
+                              {isShowingSuggestions && (
+                                <div className="mt-2 p-3 bg-[var(--surface2)] border border-purple-500/20 rounded-lg flex flex-col gap-3">
+                                  {/* Top 5 Recommendations */}
+                                  <div>
+                                    <span className="text-[10px] text-[var(--text2)] uppercase font-extrabold flex items-center gap-1">
+                                      ✨ Рекомендовані відповідності
+                                    </span>
+                                    <div className="grid grid-cols-1 gap-1.5 mt-1.5">
+                                      {(() => {
+                                        const srcWords = tokenizeAndClean(cat.name);
+                                        const recs: Array<{ id: string; name: string; score: number }> = [];
+                                        
+                                        if (srcWords.length > 0) {
+                                          for (const target of marketplaceCategories) {
+                                            const targetWords = tokenizeAndClean(target.name);
+                                            let overlap = 0;
+                                            for (const sw of srcWords) {
+                                              if (targetWords.some(tw => areWordsSimilar(sw, tw))) {
+                                                overlap++;
+                                              }
+                                            }
+                                            if (overlap > 0) {
+                                              const score = overlap / (srcWords.length + targetWords.length - overlap);
+                                              recs.push({ id: target.id, name: target.name, score });
+                                            }
+                                          }
+                                        }
+                                        
+                                        const topRecs = recs
+                                          .sort((a, b) => b.score - a.score)
+                                          .slice(0, 5);
+                                          
+                                        if (topRecs.length === 0) {
+                                          return <span className="text-[10px] text-[var(--text3)] italic p-1">Немає автоматичних рекомендацій. Скористайтеся швидким пошуком нижче.</span>;
+                                        }
+                                        
+                                        return topRecs.map(rec => (
+                                          <button
+                                            type="button"
+                                            key={rec.id}
+                                            onClick={() => {
+                                              setFeedCatMapping({
+                                                ...feedCatMapping,
+                                                [origFullId]: { id: rec.id, name: rec.name }
+                                              });
+                                              setActiveRowSuggestions(null);
+                                            }}
+                                            className="w-full text-left p-1.5 hover:bg-[var(--surface)] border border-[var(--border)] rounded text-[10px] flex justify-between items-center transition-all hover:border-purple-500/30"
+                                          >
+                                            <span className="text-[11px] text-[var(--text)] font-semibold">{rec.name}</span>
+                                            <span className="text-[9px] text-purple-400 font-extrabold uppercase bg-purple-500/10 px-1.5 py-0.5 rounded">
+                                              {(rec.score * 100).toFixed(0)}% збіг
+                                            </span>
+                                          </button>
+                                        ));
+                                      })()}
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Quick Manual Search */}
+                                  <div className="border-t border-[var(--border)] pt-2">
+                                    <span className="text-[10px] text-[var(--text2)] uppercase font-extrabold flex items-center gap-1">
+                                      🔍 Швидкий пошук у всій базі
+                                    </span>
+                                    <input
+                                      type="text"
+                                      placeholder="Введіть назву категорії для пошуку..."
+                                      value={suggestionSearchQuery}
+                                      onChange={(e) => setSuggestionSearchQuery(e.target.value)}
+                                      className="input-field text-[11px] py-1.5 px-3 w-full mt-1.5 bg-[var(--surface)] border-[var(--border)]"
+                                    />
+                                    {suggestionSearchQuery.trim().length >= 2 && (
+                                      <div className="flex flex-col gap-1 max-h-[150px] overflow-y-auto mt-1.5 border border-[var(--border)] rounded-md bg-[var(--surface)]">
+                                        {(() => {
+                                          const query = suggestionSearchQuery.toLowerCase();
+                                          const results = marketplaceCategories.filter(c => 
+                                            c.name.toLowerCase().includes(query) || c.id.includes(query)
+                                          ).slice(0, 10);
+                                          
+                                          if (results.length === 0) {
+                                            return <span className="text-[10px] p-2 text-[var(--text3)] italic">Нічого не знайдено</span>;
+                                          }
+                                          
+                                          return results.map(res => (
+                                            <button
+                                              type="button"
+                                              key={res.id}
+                                              onClick={() => {
+                                                setFeedCatMapping({
+                                                  ...feedCatMapping,
+                                                  [origFullId]: { id: res.id, name: res.name }
+                                                });
+                                                setActiveRowSuggestions(null);
+                                              }}
+                                              className="w-full text-left p-1.5 hover:bg-[var(--surface-hover)] text-[10px] border-b border-[var(--border)] last:border-b-0 flex justify-between items-center transition-all"
+                                            >
+                                              <span className="text-[11px] text-[var(--text)]">{res.name}</span>
+                                              <span className="text-[9px] text-[var(--text2)] font-mono">ID: {res.id}</span>
+                                            </button>
+                                          ));
+                                        })()}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           );
                         })}
