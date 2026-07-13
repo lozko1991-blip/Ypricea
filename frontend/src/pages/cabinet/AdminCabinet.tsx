@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { supabase } from '../../lib/supabase';
 import { 
   Loader2, 
   ChevronDown, 
@@ -1628,6 +1629,99 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
                           >
                             {syncingMarketplace === 'prom' ? <Loader2 className="animate-spin" size={12} /> : 'Синхр.'}
                           </button>
+                        </div>
+                      </div>
+
+                      {/* Sync Prom via Excel XLS */}
+                      <div className="flex flex-col gap-1.5 border-t border-[var(--border)] pt-3 mt-1">
+                        <label className="text-[10px] text-[var(--text2)]">Або імпортувати файл Excel (.xls/.xlsx) Prom</label>
+                        <div className="flex gap-2 items-center">
+                          <input 
+                            type="file"
+                            accept=".xls,.xlsx"
+                            id="prom_xls_file_input"
+                            className="text-[10px] font-bold text-[var(--text2)]"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              
+                              showToast('📥 Зчитування файлу Excel...');
+                              const reader = new FileReader();
+                              reader.onload = async (evt) => {
+                                try {
+                                  const data = evt.target?.result;
+                                  if (!data) return;
+                                  
+                                  const XLSX = await import('xlsx');
+                                  const wb = XLSX.read(data, { type: 'binary' });
+                                  const ws = wb.Sheets[wb.SheetNames[0]];
+                                  const sheetRows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
+                                  
+                                  showToast(`⚙️ Зчитано ${sheetRows.length} рядків. Форматування...`);
+                                  
+                                  const categoriesToInsert: any[] = [];
+                                  // Skip header row
+                                  for (let i = 1; i < sheetRows.length; i++) {
+                                    const row = sheetRows[i];
+                                    if (!row || row.length < 6) continue;
+                                    
+                                    const cat1 = row[0];
+                                    const cat2 = row[1];
+                                    const cat3 = row[2];
+                                    const cat4 = row[3];
+                                    const id = row[5];
+                                    if (!id) continue;
+                                    
+                                    const hierarchy = [cat1, cat2, cat3, cat4].map(s => String(s || '').trim()).filter(Boolean);
+                                    if (hierarchy.length === 0) continue;
+                                    
+                                    categoriesToInsert.push({
+                                      id: String(id),
+                                      name: hierarchy.join(' > '),
+                                      marketplace: 'prom',
+                                      parent_id: null
+                                    });
+                                  }
+                                  
+                                  if (categoriesToInsert.length === 0) {
+                                    showToast('⚠️ Не знайдено коректних категорій у файлі');
+                                    return;
+                                  }
+                                  
+                                  showToast(`📤 Очищення старих та імпорт ${categoriesToInsert.length} категорій...`);
+                                  
+                                  // 1. Delete old prom categories
+                                  const { error: delErr } = await supabase
+                                    .from('marketplace_categories')
+                                    .delete()
+                                    .eq('marketplace', 'prom');
+                                    
+                                  if (delErr) throw delErr;
+                                  
+                                  // 2. Upsert in chunks
+                                  const chunkSize = 500;
+                                  for (let i = 0; i < categoriesToInsert.length; i += chunkSize) {
+                                    const chunk = categoriesToInsert.slice(i, i + chunkSize);
+                                    const { error: upsertErr } = await supabase
+                                      .from('marketplace_categories')
+                                      .upsert(chunk);
+                                    if (upsertErr) throw upsertErr;
+                                  }
+                                  
+                                  showToast(`✅ Успішно імпортовано ${categoriesToInsert.length} категорій Prom!`);
+                                  
+                                  const statsInput = document.getElementById('prom_xls_file_input') as HTMLInputElement;
+                                  if (statsInput) statsInput.value = '';
+                                  setTimeout(() => {
+                                    window.location.reload();
+                                  }, 1500);
+                                } catch (err: any) {
+                                  showToast('⚠️ Помилка імпорту: ' + err.message);
+                                }
+                              };
+                              reader.readAsBinaryString(file);
+                            }}
+                          />
                         </div>
                       </div>
 

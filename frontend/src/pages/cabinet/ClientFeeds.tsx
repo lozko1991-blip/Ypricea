@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../../lib/supabase';
 import { 
   Plus, 
   Trash2, 
@@ -40,6 +41,31 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
   const [feedSuppliers, setFeedSuppliers] = useState<FeedSupplier[]>([]);
   const [feedRules, setFeedRules] = useState<FeedRule[]>([]);
   const [feedCatMapping, setFeedCatMapping] = useState<Record<string, { id: string; name: string }>>({});
+  
+  // Reference marketplace categories database
+  const [marketplaceCategories, setMarketplaceCategories] = useState<{ id: string; name: string }[]>([]);
+  const [loadingMktCategories, setLoadingMktCategories] = useState(false);
+
+  useEffect(() => {
+    if (isEditingFeed && activeRuleTab === 'mapping') {
+      const loadMarketplaceCategories = async () => {
+        setLoadingMktCategories(true);
+        try {
+          const { data, error } = await supabase
+            .from('marketplace_categories')
+            .select('id, name')
+            .eq('marketplace', feedFormat);
+          if (error) throw error;
+          setMarketplaceCategories(data || []);
+        } catch (e: any) {
+          console.warn('Failed to load marketplace categories:', e.message);
+        } finally {
+          setLoadingMktCategories(false);
+        }
+      };
+      loadMarketplaceCategories();
+    }
+  }, [isEditingFeed, activeRuleTab, feedFormat]);
   
   // Category parsing states
   const [parsedCategories, setParsedCategories] = useState<any[]>([]);
@@ -125,40 +151,65 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
 
   const handleClientAutoMap = () => {
     if (!parsedCategories.length) return;
+    if (!marketplaceCategories.length) {
+      showToast('⚠️ База категорій маркетплейсу порожня або завантажується...');
+      return;
+    }
+
     const newMapping = { ...feedCatMapping };
-    
-    const keywordsMap: Record<string, { id: string; name: string }> = {
-      'взуття': { id: '3503', name: 'Взуття' },
-      'обувь': { id: '3503', name: 'Взуття' },
-      'одяг': { id: '3301', name: 'Одяг' },
-      'одежда': { id: '3301', name: 'Одяг' },
-      'дитяч': { id: '2801', name: 'Дитячі товари' },
-      'детск': { id: '2801', name: 'Дитячі товари' },
-      'годинни': { id: '3705', name: 'Годинники' },
-      'часы': { id: '3705', name: 'Годинники' },
-      'аксесуар': { id: '3701', name: 'Аксесуари' },
-      'чехол': { id: '1202', name: 'Чохли для телефонів' },
-      'чехлы': { id: '1202', name: 'Чохли для телефонів' },
-      'наушник': { id: '1205', name: 'Навушники' },
-      'навушник': { id: '1205', name: 'Навушники' }
+
+    // Common stopwords to exclude from matching
+    const stopwords = new Set([
+      'для', 'та', 'і', 'в', 'на', 'и', 'с', 'під', 'по', 'за', 'из', 'от', 'до',
+      'об', 'при', 'у', 'о', 'со', 'же', 'бы', 'ли', 'все', 'для', 'всі', 'все'
+    ]);
+
+    const tokenize = (str: string) => {
+      return String(str || '')
+        .toLowerCase()
+        .replace(/[^a-zа-яіїєґ0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length >= 3 && !stopwords.has(w));
     };
 
+    // Pre-tokenize marketplace categories for high performance
+    const tokenizedMkt = marketplaceCategories.map(cat => ({
+      ...cat,
+      tokens: tokenize(cat.name)
+    }));
+
     let mappedCount = 0;
+
     parsedCategories.forEach(cat => {
-      const nameLower = cat.name.toLowerCase();
       if (!newMapping[cat.id] || !newMapping[cat.id].id) {
-        for (const [key, target] of Object.entries(keywordsMap)) {
-          if (nameLower.includes(key)) {
-            newMapping[cat.id] = target;
-            mappedCount++;
-            break;
+        const srcWords = tokenize(cat.name);
+        if (srcWords.length === 0) return;
+
+        let bestItem: any = null;
+        let maxOverlap = 0;
+        let bestScore = 0;
+
+        for (const target of tokenizedMkt) {
+          const overlap = srcWords.filter(w => target.tokens.includes(w)).length;
+          if (overlap > 0) {
+            const score = overlap / (srcWords.length + target.tokens.length - overlap);
+            if (overlap > maxOverlap || (overlap === maxOverlap && score > bestScore)) {
+              maxOverlap = overlap;
+              bestScore = score;
+              bestItem = target;
+            }
           }
+        }
+
+        if (bestItem) {
+          newMapping[cat.id] = { id: bestItem.id, name: bestItem.name };
+          mappedCount++;
         }
       }
     });
 
     setFeedCatMapping(newMapping);
-    showToast(`✅ Автоматично співставлено ${mappedCount} категорій!`);
+    showToast(`🪄 Автоматично співставлено ${mappedCount} категорій!`);
   };
 
   const onSaveClick = async () => {
@@ -713,12 +764,18 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                                 />
                                 <input 
                                   type="text" 
-                                  placeholder="Цільова Назва"
+                                  list="mkt-cats-list"
+                                  placeholder="Цільова Назва 🔍"
                                   value={currentMap.name}
                                   onChange={(e) => {
+                                    const val = e.target.value;
+                                    const found = marketplaceCategories.find(c => c.name === val);
                                     setFeedCatMapping({
                                       ...feedCatMapping,
-                                      [origFullId]: { ...currentMap, name: e.target.value }
+                                      [origFullId]: { 
+                                        id: found ? found.id : currentMap.id, 
+                                        name: val 
+                                      }
                                     });
                                   }}
                                   className="input-field text-[10px] py-1 px-2 w-full"
@@ -727,6 +784,15 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                             </div>
                           );
                         })}
+                        
+                        {/* Reference Marketplace Categories Autocomplete DataList */}
+                        <datalist id="mkt-cats-list">
+                          {marketplaceCategories.map(c => (
+                            <option key={`${c.id}-${c.name}`} value={c.name}>
+                              {c.name} (ID: {c.id})
+                            </option>
+                          ))}
+                        </datalist>
                       </div>
                     )}
                   </div>
