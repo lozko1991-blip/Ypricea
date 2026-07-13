@@ -326,6 +326,9 @@ export function cleanDescriptionForEva(text, nameUa, vendor) {
   // Remove img tags (EVA doesn't accept images in descriptions)
   clean = clean.replace(/<img[^>]*\/?>/gi, '');
 
+  // Strip <a> tags completely but keep their text content
+  clean = clean.replace(/<a[^>]*>([\s\S]*?)<\/a>/gi, '$1');
+
   // 3. Remove URLs
   clean = clean.replace(/https?:\/\/[^\s<]+|www\.[^\s<]+/gi, '');
 
