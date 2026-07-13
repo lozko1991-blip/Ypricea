@@ -25,6 +25,33 @@ import { runAger } from './suppliers/ager.mjs';
 import { runIssa } from './suppliers/issa.mjs';
 import { runDraap } from './suppliers/draap.mjs';
 
+// Функція запису логу синхронізації в Supabase
+async function saveSyncLog(supplierName, status, importedCount, message = '') {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !supabaseKey) return;
+  try {
+    const url = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/sync_logs`;
+    await fetch(url, {
+      method: 'POST',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        supplier_name: supplierName,
+        user_email: 'системний крон',
+        status: status,
+        imported_count: importedCount,
+        message: message
+      })
+    });
+  } catch (e) {
+    console.warn('⚠️ Не вдалося записати лог синхронізації в Supabase:', e.message);
+  }
+}
+
 // ──────────── 1. Завантаження XML ЯВШОКЕ ────────────
 async function download(retries = 3) {
   for (let i = 1; i <= retries; i++) {
@@ -673,4 +700,17 @@ function writeShardedCatalog({ meta, keptCats, directCount, totalCount, products
     products: allProducts,
   });
   console.log(`🎉 Готово. Загалом ${allProducts.length} товарів у каталозі.`);
-})().catch(e => { console.error('💥', e); process.exit(1); });
+
+  // Записуємо успішні сесії синхронізації в Supabase
+  await saveSyncLog('ЯВШОКЕ', 'success', yavProducts.length);
+  if (me) await saveSyncLog('Mastereva', 'success', me.products.length);
+  if (ip2) await saveSyncLog('Iposud2', 'success', ip2.products.length);
+  if (ager) await saveSyncLog('AGER', 'success', ager.products.length);
+  if (issa) await saveSyncLog('ISSA Plus', 'success', issa.products.length);
+  if (draap) await saveSyncLog('Draap', 'success', draap.products.length);
+
+})().catch(async (e) => { 
+  console.error('💥', e); 
+  await saveSyncLog('Системний імпорт', 'failed', 0, e.message);
+  process.exit(1); 
+});
