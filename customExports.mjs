@@ -879,14 +879,16 @@ export async function buildUserCustomExports() {
       }
     }
 
+    const isEmergency = !!preset.emergency_stock_zero;
+
     const promOffers = filteredOffers.map(o => ({
       id: o.id,
-      available: o.available,
+      available: isEmergency ? 'false' : o.available,
       cat: o.categoryId,
       drop: parseFloat(o.price) || 0,
       finalPrice: o.finalPrice,
       priceOld: o.price_old || o.priceOld || null,
-      stockQuantity: o.stock_quantity !== undefined ? o.stock_quantity : null,
+      stockQuantity: isEmergency ? 0 : (o.stock_quantity !== undefined ? o.stock_quantity : null),
       name: o.name,
       name_ua: o.name_ua,
       vendorCode: o.vendorCode,

@@ -8,7 +8,8 @@ import {
   Sliders, 
   Loader2, 
   Save,
-  Sparkles
+  Sparkles,
+  AlertOctagon
 } from 'lucide-react';
 import type { CustomFeed, FeedSupplier, FeedRule } from './CabinetTypes';
 
@@ -240,7 +241,12 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
   // New Rule Temporary States
   const [newRuleScope, setNewRuleScope] = useState<'global' | 'category' | 'supplier'>('global');
   const [newRuleScopeValue, setNewRuleScopeValue] = useState('');
-  const [newRuleConfig, setNewRuleConfig] = useState<any>({});
+  const [newRuleConfig, setNewRuleConfig] = useState<any>({ markup_type: 'simple' });
+  const [rangeRows, setRangeRows] = useState<Array<{ min: number; max: number | null; percent: number; fixed: number }>>([
+    { min: 0, max: 200, percent: 0, fixed: 0 },
+    { min: 200, max: 1000, percent: 0, fixed: 0 },
+    { min: 1000, max: null, percent: 0, fixed: 0 }
+  ]);
 
   // Helper to parse XML categories locally in the browser
   const handleParseSupplierCategories = async (urls: string[]) => {
@@ -512,6 +518,32 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                         <td className="py-3 px-3 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <button 
+                              type="button"
+                              onClick={async () => {
+                                const newEmergencyState = !feed.emergency_stock_zero;
+                                const confirmMsg = newEmergencyState 
+                                  ? `🚨 Ви дійсно хочете АВАРІЙНО ВИМКНУТИ фід "${feed.name}"?\nУсі товари в цьому фіді отримають статус: "немає в наявності", а кількість на складі: 0.`
+                                  : `🔄 Відновити наявність товарів для фіду "${feed.name}"?`;
+                                
+                                if (confirm(confirmMsg)) {
+                                  const updatedFeed: CustomFeed = {
+                                    ...feed,
+                                    emergency_stock_zero: newEmergencyState
+                                  };
+                                  await onSaveFeed(updatedFeed);
+                                }
+                              }}
+                              className={`gbtn flex items-center gap-1 border py-1 px-2.5 rounded-lg transition-all ${
+                                feed.emergency_stock_zero 
+                                  ? 'bg-red-600 border-red-500 text-white shadow-lg shadow-red-600/20' 
+                                  : 'border-red-500/30 text-red-500 hover:bg-red-500/5'
+                              }`}
+                              title={feed.emergency_stock_zero ? "Фід вимкнено. Натисніть, щоб увімкнути знову" : "Встановити наявність товарів: 'немає в наявності', а сток: 0"}
+                            >
+                              <AlertOctagon size={11} className={feed.emergency_stock_zero ? 'animate-pulse' : ''} />
+                              {feed.emergency_stock_zero ? 'Увімкнути фід' : 'Аварійне вимкнення'}
+                            </button>
+                            <button 
                               onClick={() => handleSelectFeedForEditing(feed)}
                               className="gbtn flex items-center gap-1 border border-[var(--border)] py-1 px-2.5 rounded-lg hover:bg-[var(--surface2)]"
                             >
@@ -670,22 +702,33 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                     {/* Active markups list */}
                     <div className="flex flex-col gap-2">
                       {feedRules.filter(r => r.type === 'markup').map((r, idx) => (
-                        <div key={idx} className="flex justify-between items-center bg-[var(--surface2)] border border-[var(--border)] p-3 rounded-xl text-[10px] font-bold">
-                          <div>
-                            <span className="inline-flex px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 mr-2 font-black">📈 НАЦІНКА</span>
-                            <span className="text-[var(--text2)]">Діє на:</span> <span className="text-[var(--text)] font-extrabold mr-3 uppercase">{r.scope === 'global' ? '🌐 Глобально' : r.scope === 'category' ? `📂 Категорія ${r.scope_value}` : `🏭 Постачальник ${r.scope_value}`}</span>
-                            {r.config.percent !== undefined ? (
-                              <span className="text-[var(--text)]">+{r.config.percent}% та +{r.config.fixed || 0} ₴</span>
-                            ) : (
-                              <span className="text-[var(--text2)]">За діапазонами</span>
-                            )}
+                        <div key={idx} className="flex flex-col gap-1.5 bg-[var(--surface2)] border border-[var(--border)] p-3 rounded-xl text-[10px] font-bold">
+                          <div className="flex justify-between items-center w-full">
+                            <div>
+                              <span className="inline-flex px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 mr-2 font-black">📈 НАЦІНКА</span>
+                              <span className="text-[var(--text2)]">Діє на:</span> <span className="text-[var(--text)] font-extrabold mr-3 uppercase">{r.scope === 'global' ? '🌐 Глобально' : r.scope === 'category' ? `📂 Категорія ${r.scope_value}` : `🏭 Постачальник ${r.scope_value}`}</span>
+                            </div>
+                            <button 
+                              type="button"
+                              onClick={() => setFeedRules(feedRules.filter(rules => rules !== r))}
+                              className="text-red-500 hover:opacity-85 p-1"
+                            >
+                              <Trash2 size={12} />
+                            </button>
                           </div>
-                          <button 
-                            onClick={() => setFeedRules(feedRules.filter((_, i) => i !== idx))}
-                            className="text-red-500 hover:opacity-85 p-1"
-                          >
-                            <Trash2 size={12} />
-                          </button>
+                          {r.config.markup_type === 'ranges' ? (
+                            <div className="flex flex-wrap gap-1.5 mt-0.5 pl-6">
+                              {r.config.ranges?.map((range: any, rIdx: number) => (
+                                <span key={rIdx} className="inline-block bg-[var(--surface)] border border-[var(--border)] px-2 py-0.5 rounded text-[9px] font-semibold text-[var(--text2)]">
+                                  Від {range.min} до {range.max === null ? '∞' : range.max} ₴ ({range.percent}% + {range.fixed} ₴)
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="pl-6 text-[var(--text)] font-extrabold text-[10px]">
+                              Націнка: +{r.config.percent}% та +{r.config.fixed || 0} ₴
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -733,24 +776,93 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                         </div>
 
                         {newRuleConfig.markup_type === 'ranges' ? (
-                          <div className="col-span-2 border border-[var(--border)] p-3 rounded-xl bg-[var(--surface2)] flex flex-col gap-2">
-                            <span className="font-bold text-[var(--text2)] block">Діапазони націнки (собівартість)</span>
-                            <div className="grid grid-cols-3 gap-2 text-[10px]">
-                              <div className="bg-[var(--surface)] p-2 rounded-lg border border-[var(--border)]">
-                                <span className="block font-extrabold text-[var(--text)] mb-1">До 200 ₴</span>
-                                <input type="number" placeholder="Націнка %" className="input-field w-full py-1 text-[10px] mb-1" id="r1_pct" />
-                                <input type="number" placeholder="Націнка ₴" className="input-field w-full py-1 text-[10px]" id="r1_fxd" />
-                              </div>
-                              <div className="bg-[var(--surface)] p-2 rounded-lg border border-[var(--border)]">
-                                <span className="block font-extrabold text-[var(--text)] mb-1">200 - 1000 ₴</span>
-                                <input type="number" placeholder="Націнка %" className="input-field w-full py-1 text-[10px] mb-1" id="r2_pct" />
-                                <input type="number" placeholder="Націнка ₴" className="input-field w-full py-1 text-[10px]" id="r2_fxd" />
-                              </div>
-                              <div className="bg-[var(--surface)] p-2 rounded-lg border border-[var(--border)]">
-                                <span className="block font-extrabold text-[var(--text)] mb-1">Понад 1000 ₴</span>
-                                <input type="number" placeholder="Націнка %" className="input-field w-full py-1 text-[10px] mb-1" id="r3_pct" />
-                                <input type="number" placeholder="Націнка ₴" className="input-field w-full py-1 text-[10px]" id="r3_fxd" />
-                              </div>
+                          <div className="col-span-2 border border-[var(--border)] p-3 rounded-xl bg-[var(--surface2)]/50 flex flex-col gap-2.5">
+                            <div className="flex justify-between items-center flex-wrap gap-2">
+                              <span className="font-extrabold text-[var(--text2)] text-[10px] uppercase">📋 Діапазони націнки за собівартістю</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const lastRow = rangeRows[rangeRows.length - 1];
+                                  const nextMin = lastRow ? (lastRow.max || 1000) : 0;
+                                  setRangeRows([...rangeRows, { min: nextMin, max: null, percent: 0, fixed: 0 }]);
+                                }}
+                                className="gbtn border border-purple-500/30 hover:border-purple-500 hover:bg-purple-500/10 text-purple-400 font-extrabold text-[9px] py-1 px-2.5 rounded-lg flex items-center gap-1 transition-all"
+                              >
+                                + Додати новий діапазон
+                              </button>
+                            </div>
+                            <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1">
+                              {rangeRows.map((row, idx) => (
+                                <div key={idx} className="flex gap-2 items-center bg-[var(--surface)] p-2 rounded-lg border border-[var(--border)] text-[9px] flex-wrap sm:flex-nowrap">
+                                  <div className="flex-1 flex gap-1.5 items-center min-w-[150px]">
+                                    <span className="text-[var(--text3)]">Від</span>
+                                    <input 
+                                      type="number" 
+                                      value={row.min} 
+                                      onChange={(e) => {
+                                        const newRows = [...rangeRows];
+                                        newRows[idx].min = Number(e.target.value || 0);
+                                        setRangeRows(newRows);
+                                      }}
+                                      className="input-field text-[10px] py-0.5 px-1.5 w-14 text-center" 
+                                    />
+                                    <span className="text-[var(--text3)]">до</span>
+                                    <input 
+                                      type="number" 
+                                      value={row.max === null ? '' : row.max} 
+                                      placeholder="∞"
+                                      onChange={(e) => {
+                                        const newRows = [...rangeRows];
+                                        const val = e.target.value;
+                                        newRows[idx].max = val === '' ? null : Number(val);
+                                        setRangeRows(newRows);
+                                      }}
+                                      className="input-field text-[10px] py-0.5 px-1.5 w-14 text-center" 
+                                    />
+                                    <span className="text-[var(--text2)]">₴</span>
+                                  </div>
+                                  
+                                  <div className="flex gap-1.5 items-center">
+                                    <input 
+                                      type="number" 
+                                      placeholder="Націнка %" 
+                                      value={row.percent || ''}
+                                      onChange={(e) => {
+                                        const newRows = [...rangeRows];
+                                        newRows[idx].percent = Number(e.target.value || 0);
+                                        setRangeRows(newRows);
+                                      }}
+                                      className="input-field text-[10px] py-0.5 px-1.5 w-16 text-center" 
+                                    />
+                                    <span className="text-[var(--text2)]">%</span>
+                                    <input 
+                                      type="number" 
+                                      placeholder="Націнка ₴" 
+                                      value={row.fixed || ''}
+                                      onChange={(e) => {
+                                        const newRows = [...rangeRows];
+                                        newRows[idx].fixed = Number(e.target.value || 0);
+                                        setRangeRows(newRows);
+                                      }}
+                                      className="input-field text-[10px] py-0.5 px-1.5 w-16 text-center" 
+                                    />
+                                    <span className="text-[var(--text2)]">₴</span>
+                                  </div>
+                                  
+                                  {rangeRows.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setRangeRows(rangeRows.filter((_, i) => i !== idx));
+                                      }}
+                                      className="text-red-500 hover:text-red-600 p-1 transition-all ml-auto"
+                                      title="Видалити цей діапазон"
+                                    >
+                                      <Trash2 size={11} />
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
                             </div>
                           </div>
                         ) : (
@@ -771,18 +883,10 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                           let configData: any = {};
                           const mType = newRuleConfig.markup_type || 'simple';
                           if (mType === 'ranges') {
-                            const r1_pct = Number((document.getElementById("r1_pct") as HTMLInputElement)?.value || 0);
-                            const r1_fxd = Number((document.getElementById("r1_fxd") as HTMLInputElement)?.value || 0);
-                            const r2_pct = Number((document.getElementById("r2_pct") as HTMLInputElement)?.value || 0);
-                            const r2_fxd = Number((document.getElementById("r2_fxd") as HTMLInputElement)?.value || 0);
-                            const r3_pct = Number((document.getElementById("r3_pct") as HTMLInputElement)?.value || 0);
-                            const r3_fxd = Number((document.getElementById("r3_fxd") as HTMLInputElement)?.value || 0);
-                            configData.ranges = [
-                              { min: 0, max: 200, percent: r1_pct, fixed: r1_fxd },
-                              { min: 200, max: 1000, percent: r2_pct, fixed: r2_fxd },
-                              { min: 1000, max: null, percent: r3_pct, fixed: r3_fxd }
-                            ];
+                            configData.markup_type = 'ranges';
+                            configData.ranges = rangeRows;
                           } else {
+                            configData.markup_type = 'simple';
                             configData.percent = Number((document.getElementById("sim_pct") as HTMLInputElement)?.value || 0);
                             configData.fixed = Number((document.getElementById("sim_fxd") as HTMLInputElement)?.value || 0);
                           }

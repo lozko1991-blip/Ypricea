@@ -63,6 +63,7 @@ export interface FeedRule {
   config: {
     percent?: number;
     fixed?: number;
+    markup_type?: 'simple' | 'ranges';
     ranges?: Array<{ min: number; max: number | null; percent: number; fixed: number }>;
     search_text?: string;
     replace_text?: string;
@@ -96,6 +97,7 @@ export interface CustomFeed {
   suppliers: FeedSupplier[];
   rules: FeedRule[];
   category_mapping: Record<string, { id: string; name: string }>;
+  emergency_stock_zero?: boolean;
   created_at?: string;
   updated_at?: string;
 }
