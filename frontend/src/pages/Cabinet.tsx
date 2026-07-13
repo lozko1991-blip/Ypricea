@@ -875,9 +875,6 @@ export default function Cabinet() {
             setProfilePhone={setProfilePhone}
             profileSaving={profileSaving}
             handleSaveProfile={handleSaveProfile}
-            ghTokenVal={ghTokenVal}
-            setGhTokenVal={setGhTokenVal}
-            onSaveGhToken={handleSaveGhToken}
             profile={profile}
             globalSettings={globalSettings}
             user={user}
@@ -927,6 +924,8 @@ export default function Cabinet() {
             generatorProducts={generatorProducts}
             imgPrefix={imgPrefix}
             ghTokenVal={ghTokenVal}
+            setGhTokenVal={setGhTokenVal}
+            onSaveGhToken={handleSaveGhToken}
             showToast={showToast}
           />
         )}

@@ -12,9 +12,6 @@ interface ClientProfileProps {
   profileSaving: boolean;
   handleSaveProfile: () => void;
   globalSettings: GlobalSettings;
-  ghTokenVal: string;
-  setGhTokenVal: (val: string) => void;
-  onSaveGhToken: () => void;
 }
 
 export const ClientProfile: React.FC<ClientProfileProps> = ({
@@ -28,10 +25,7 @@ export const ClientProfile: React.FC<ClientProfileProps> = ({
   setProfilePhone,
   profileSaving,
   handleSaveProfile,
-  globalSettings,
-  ghTokenVal,
-  setGhTokenVal,
-  onSaveGhToken
+  globalSettings
 }) => {
   const expiresAt = profile?.subscription_expires_at 
     ? new Date(profile.subscription_expires_at).toLocaleDateString('uk-UA') 
@@ -105,33 +99,7 @@ export const ClientProfile: React.FC<ClientProfileProps> = ({
           </div>
         </div>
 
-        {/* GitHub PAT config card */}
-        <div className="card">
-          <h2 className="text-sm font-black mb-2">Інтеграція з GitHub</h2>
-          <p className="text-[10px] text-[var(--text2)] mb-4 font-semibold">
-            Потрібно для автоматичного завантаження налаштувань ваших фідів у репозиторій для збірки.
-          </p>
-          <div className="space-y-4">
-            <div>
-              <label className="text-[10px] font-black uppercase text-[var(--text2)] block mb-1.5">
-                Personal Access Token (PAT)
-              </label>
-              <input
-                type="password"
-                value={ghTokenVal}
-                onChange={(e) => setGhTokenVal(e.target.value)}
-                className="input-field w-full py-1.5 px-3 text-xs font-mono"
-                placeholder="ghp_..."
-              />
-            </div>
-            <button
-              onClick={onSaveGhToken}
-              className="gbtn bg-[var(--accent)] text-white w-full py-2 text-xs font-black rounded-xl"
-            >
-              Підключити токен GitHub
-            </button>
-          </div>
-        </div>
+
       </div>
 
       <div className="card flex flex-col gap-6">

@@ -56,6 +56,8 @@ interface AdminCabinetProps {
   generatorProducts: any[];
   imgPrefix: string;
   ghTokenVal: string;
+  setGhTokenVal: (val: string) => void;
+  onSaveGhToken: () => void;
   showToast: (msg: string) => void;
 }
 
@@ -101,6 +103,8 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
   generatorProducts,
   imgPrefix,
   ghTokenVal,
+  setGhTokenVal,
+  onSaveGhToken,
   showToast
 }) => {
   // Sub-Tab Navigation for Admin view
@@ -1517,6 +1521,36 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
               {/* SUB-TAB: SITE CONFIG & MARKETPLACE DATABASE */}
               {adminActiveSubTab === 'settings' && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                  {/* GitHub PAT config card */}
+                  <div className="card flex flex-col gap-4">
+                    <div>
+                      <h2 className="text-sm font-black text-[var(--text)]">Інтеграція з GitHub (Адміністратор)</h2>
+                      <p className="text-[10px] text-[var(--text2)] font-semibold mt-0.5">
+                        Потрібно для автоматичного завантаження налаштувань ваших фідів у репозиторій для збірки.
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-[var(--text2)] block mb-1.5">
+                          Personal Access Token (PAT)
+                        </label>
+                        <input
+                          type="password"
+                          value={ghTokenVal}
+                          onChange={(e) => setGhTokenVal(e.target.value)}
+                          className="input-field w-full py-1.5 px-3 text-xs font-mono"
+                          placeholder="ghp_..."
+                        />
+                      </div>
+                      <button
+                        onClick={onSaveGhToken}
+                        className="btn-primary text-xs py-2 justify-center font-black"
+                      >
+                        Підключити токен GitHub
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Payment Requisites Config */}
                   <div className="card flex flex-col gap-4">
                     <div>
