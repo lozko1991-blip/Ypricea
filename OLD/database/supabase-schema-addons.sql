@@ -69,3 +69,26 @@ create policy "Allow read marketplace_categories to authenticated"
 create policy "Allow write marketplace_categories to admins" 
   on public.marketplace_categories for all 
   using (public.is_admin());
+
+-- ── 5. TRANSLATION CACHE ──────────────────────────────────────────
+create table if not exists public.translation_cache (
+  hash        text        not null primary key,
+  ru_text     text        not null,
+  uk_text     text        not null,
+  created_at  timestamptz not null default now()
+);
+
+-- Enable RLS
+alter table public.translation_cache enable row level security;
+
+-- Policies for TRANSLATION CACHE
+drop policy if exists "Allow read translation_cache to all" on public.translation_cache;
+drop policy if exists "Allow insert translation_cache to all" on public.translation_cache;
+
+create policy "Allow read translation_cache to all" 
+  on public.translation_cache for select 
+  using (true);
+
+create policy "Allow insert translation_cache to all" 
+  on public.translation_cache for insert 
+  with check (true);
