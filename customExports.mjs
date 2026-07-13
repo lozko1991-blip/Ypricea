@@ -363,6 +363,38 @@ export function cleanDescriptionForEva(text, nameUa, vendor) {
   return clean;
 }
 
+export function cleanDescriptionForRozetka(text) {
+  if (!text || !text.trim()) return '';
+
+  let clean = deEsc(deEsc(text));
+
+  // 1. Strip script, style, iframe, video, audio tags with content
+  clean = clean.replace(/<(script|style|iframe|video|audio)[^>]*>[\s\S]*?<\/\1>/gi, '');
+  clean = clean.replace(/<(video|audio|iframe)[^>]*\/>/gi, '');
+  clean = clean.replace(/<!--[\s\S]*?-->/g, '');
+
+  // 2. Strip inline attributes (style, class, id)
+  clean = clean.replace(/\s+style=["'][^"']*["']/gi, '');
+  clean = clean.replace(/\s+class=["'][^"']*["']/gi, '');
+  clean = clean.replace(/\s+id=["'][^"']*["']/gi, '');
+
+  // 3. Remove non-whitelisted tags but keep content
+  const whitelist = /<\/?(p|br|ul|li|ol|b|strong|i|em|table|tr|td|th|thead|tbody)\b[^>]*>/gi;
+  clean = clean.replace(/<[^>]+>/g, (match) => {
+    if (match.match(whitelist)) {
+      const isClosing = match.startsWith('</');
+      const tagName = match.replace(/[<>\/]/g, '').split(' ')[0];
+      return isClosing ? `</${tagName}>` : `<${tagName}>`;
+    }
+    return '';
+  });
+
+  // 4. Prevent breaking CDATA
+  clean = clean.replace(/]]>/g, ']] >');
+
+  return clean.trim();
+}
+
 export function buildPromXml(offers, catById, opts = {}) {
   const idPfx   = String(opts.idPrefix  || '');
   const catPfx  = String(opts.catPrefix || '');
@@ -414,6 +446,19 @@ export function buildPromXml(offers, catById, opts = {}) {
     const groupId  = o.groupId ? (idPfx + o.groupId) : '';
     let params = o.params || [];
     if (doFillParams) params = fillDefaultParamsSrv(params);
+    if (opts.format === 'rozetka') {
+      const seenParamNames = new Set();
+      const uniqueParams = [];
+      params.forEach(pm => {
+        if (!pm || !pm.name) return;
+        const normName = pm.name.trim().toLowerCase();
+        if (!seenParamNames.has(normName)) {
+          seenParamNames.add(normName);
+          uniqueParams.push(pm);
+        }
+      });
+      params = uniqueParams;
+    }
 
     const brand  = addBrand ? getOfferBrand(o, defaultBrand) : '';
     const nameRu = brand ? withBrandSrv(o.name || o.name_ua || 'Без назви', brand) : (o.name || o.name_ua || 'Без назви');
@@ -456,6 +501,9 @@ export function buildPromXml(offers, catById, opts = {}) {
     if (opts.format === 'eva') {
       dRu = cleanDescriptionForEva(dRu, nameRu, brand || o.vendor || 'NoName');
       dUa = cleanDescriptionForEva(dUa, nameUa, brand || o.vendor || 'NoName');
+    } else if (opts.format === 'rozetka') {
+      dRu = cleanDescriptionForRozetka(dRu);
+      dUa = cleanDescriptionForRozetka(dUa);
     }
     if (dRu) x += `  <description>${cdX(dRu)}</description>\n`;
     if (dUa) x += `  <description_ua>${cdX(dUa)}</description_ua>\n`;
