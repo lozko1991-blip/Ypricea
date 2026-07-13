@@ -424,8 +424,9 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
   const yavStats = useMemo(() => {
     if (!generatorProducts.length) return { selectedCatsCount: 0, productsCount: 0 };
     const selected = new Set<string>();
+    const yavCats = categories.filter(c => c.src === 'yavshoke');
     const childrenMap: Record<string, string[]> = {};
-    categories.forEach(c => {
+    yavCats.forEach(c => {
       const pid = String(c.parentId || '');
       if (!childrenMap[pid]) childrenMap[pid] = [];
       childrenMap[pid].push(String(c.id));
@@ -455,8 +456,9 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
   const meStats = useMemo(() => {
     if (!generatorProducts.length) return { selectedCatsCount: 0, productsCount: 0 };
     const selected = new Set<string>();
+    const meCats = categories.filter(c => c.src === 'mastereva');
     const childrenMap: Record<string, string[]> = {};
-    categories.forEach(c => {
+    meCats.forEach(c => {
       const pid = String(c.parentId || '');
       if (!childrenMap[pid]) childrenMap[pid] = [];
       childrenMap[pid].push(String(c.id));
@@ -647,8 +649,12 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
     const avail = type === 'yavshoke' ? yavAvailOnly : meAvailOnly;
 
     const finalCats = new Set<string>();
+    // Build childrenMap only from categories of THIS supplier to avoid cross-supplier ID collisions
+    const supplierCats = categories.filter(c =>
+      type === 'yavshoke' ? c.src === 'yavshoke' : c.src === 'mastereva'
+    );
     const childrenMap: Record<string, string[]> = {};
-    categories.forEach(c => {
+    supplierCats.forEach(c => {
       const pid = String(c.parentId || '');
       if (!childrenMap[pid]) childrenMap[pid] = [];
       childrenMap[pid].push(String(c.id));
