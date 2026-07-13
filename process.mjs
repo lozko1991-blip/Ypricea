@@ -1208,6 +1208,10 @@ async function buildUserCustomExports() {
           keep = false;
           break;
         }
+        if (cfg.max_cost_price && cost > parseFloat(cfg.max_cost_price)) {
+          keep = false;
+          break;
+        }
       }
 
       if (keep) {
