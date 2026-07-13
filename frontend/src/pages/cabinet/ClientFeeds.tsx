@@ -97,12 +97,17 @@ const stopwords = new Set([
   'или', 'або', 'как', 'як', 'без', 'через'
 ]);
 
+function stripSuffix(word: string): string {
+  return word
+    .replace(/(овые|ові|ые|іе|ие|ий|ый|ое|ая|яя|ічні|ичные|ичная|ічна|ные|ні|ний|ний|ація|ация|еские|еские|ські|ские|ська|ская|ивные|ивні|ова|ово|ево|єво|иця|ица|ка|ки|ики|ики|и|ы|a|я|е|о|у|ю|і|и|ь|я)$/g, '');
+}
+
 function cleanWord(word: string): string {
   let w = word.toLowerCase();
   if (translationDict[w]) {
     w = translationDict[w];
   }
-  return w
+  w = w
     .replace(/э/g, 'е')
     .replace(/и/g, 'і')
     .replace(/ы/g, 'и')
@@ -112,25 +117,27 @@ function cleanWord(word: string): string {
     .replace(/й/g, 'й')
     .replace(/я/g, 'а')
     .replace(/ю/g, 'у');
+  return stripSuffix(w);
 }
 
 function areWordsSimilar(norm1: string, norm2: string): boolean {
   if (norm1 === norm2) return true;
+  if (norm1.length === 0 || norm2.length === 0) return false;
   if (norm1.substring(0, 2) !== norm2.substring(0, 2)) return false;
   
   const len1 = norm1.length;
   const len2 = norm2.length;
   if (len1 > len2) {
-    if (len2 >= 4 && norm1.startsWith(norm2)) return true;
+    if (len2 >= 3 && norm1.startsWith(norm2)) return true;
   } else {
-    if (len1 >= 4 && norm2.startsWith(norm1)) return true;
+    if (len1 >= 3 && norm2.startsWith(norm1)) return true;
   }
   
   const dist = levenshtein(norm1, norm2);
   const minLen = Math.min(len1, len2);
   
-  if (minLen <= 4 && dist <= 1) return true;
-  if (minLen > 4 && dist <= 2) return true;
+  if (minLen <= 3 && dist <= 1) return true;
+  if (minLen > 3 && dist <= 2) return true;
   
   return false;
 }
@@ -141,7 +148,8 @@ function tokenizeAndClean(str: string): string[] {
     .replace(/[^a-zа-яіїєґ0-9\s]/g, ' ')
     .split(/\s+/)
     .filter(w => w.length >= 3 && !stopwords.has(w))
-    .map(cleanWord);
+    .map(cleanWord)
+    .filter(w => w.length >= 2);
 }
 
 interface ClientFeedsProps {
