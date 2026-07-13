@@ -100,7 +100,7 @@ export default function Cabinet() {
       setExportsLoading(true);
       try {
         const timestamp = Date.now();
-        const res = await fetch(`${window.location.origin}${import.meta.env.BASE_URL}data/exports.json?_=${timestamp}`);
+        const res = await fetch(`data/exports.json?_=${timestamp}`);
         if (res.ok) {
           const data = await res.json();
           setExportsList(data.exports || []);
@@ -158,7 +158,7 @@ export default function Cabinet() {
       } else {
         // Fallback to static manifest file
         const timestamp = Date.now();
-        const res = await fetch(`${window.location.origin}${import.meta.env.BASE_URL}data/user-exports.json?_=${timestamp}`);
+        const res = await fetch(`data/user-exports.json?_=${timestamp}`);
         if (res.ok) {
           const fileData = await res.json();
           setCustomFeeds(fileData.exports || []);
@@ -189,7 +189,7 @@ export default function Cabinet() {
         try {
           // 1. Fetch categories
           const timestamp = Date.now();
-          const catsRes = await fetch(`${window.location.origin}${import.meta.env.BASE_URL}data/categories.json?_=${timestamp}`);
+          const catsRes = await fetch(`data/categories.json?_=${timestamp}`);
           if (catsRes.ok) {
             const json = await catsRes.json();
             setCategories(json.categories || []);
@@ -198,7 +198,7 @@ export default function Cabinet() {
 
           // 2. Fetch gzipped index.json (5.6MB) for counting and local generation
           setGeneratorStatus('Завантаження бази товарів (~5.6 МБ)...');
-          const productsData = await fetchGzipJSON(`${window.location.origin}${import.meta.env.BASE_URL}data/index.json.gz?_=${timestamp}`);
+          const productsData = await fetchGzipJSON(`data/index.json.gz?_=${timestamp}`);
           setGeneratorProducts(productsData.products || []);
         } catch (e) {
           console.error('Failed loading generator database', e);

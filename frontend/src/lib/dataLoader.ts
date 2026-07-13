@@ -7,7 +7,7 @@ const descPending: Record<number, Promise<Map<string, any>> | undefined> = {};
 let shardMapCache: Record<string, number> | null = null;
 let shardMapPending: Promise<Record<string, number>> | null = null;
 
-const BASE_URL = import.meta.env.BASE_URL || '/';
+const BASE_URL = (import.meta.env.BASE_URL === './' || import.meta.env.BASE_URL === '.') ? '' : (import.meta.env.BASE_URL || '/');
 
 export async function fetchGzipJSON(url: string): Promise<any> {
   const r = await fetch(url, { cache: 'force-cache' });

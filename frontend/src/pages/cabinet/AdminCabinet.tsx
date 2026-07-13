@@ -1438,7 +1438,7 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
                         <div key={e.name} className="flex justify-between items-center flex-wrap gap-2 text-xs font-semibold py-1">
                           <span className="font-extrabold text-[var(--text)]">{e.name}</span>
                           <a 
-                            href={`${window.location.origin}${import.meta.env.BASE_URL}exports/${e.name}.xml`} 
+                            href={`exports/${e.name}.xml`} 
                             target="_blank" 
                             rel="noreferrer"
                             className="text-blue-500 text-[10px] hover:underline truncate max-w-[300px]"

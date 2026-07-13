@@ -98,7 +98,7 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
       // fallback to loading JSON preset from GitHub Pages
       try {
         const timestamp = Date.now();
-        const res = await fetch(`${window.location.origin}${import.meta.env.BASE_URL}presets/user-feed-${feed.token}.json?_=${timestamp}`);
+        const res = await fetch(`presets/user-feed-${feed.token}.json?_=${timestamp}`);
         if (res.ok) {
           const config = await res.json();
           setFeedSuppliers(config.suppliers || []);
