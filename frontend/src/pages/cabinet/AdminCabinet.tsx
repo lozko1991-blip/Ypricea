@@ -5,7 +5,9 @@ import {
   ChevronDown, 
   ChevronRight, 
   Save,
-  X
+  X,
+  RefreshCw,
+  Trash2
 } from 'lucide-react';
 import type { Category, Order, Profile, SyncLog, GlobalSettings } from './CabinetTypes';
 import { 
@@ -40,6 +42,7 @@ interface AdminCabinetProps {
   customFeeds: any[];
   syncLogs: SyncLog[];
   syncLogsLoading: boolean;
+  onRefreshSyncLogs?: () => Promise<void>;
   globalSettings: GlobalSettings;
   globalSettingsLoading: boolean;
   savingGlobalSettings: boolean;
@@ -87,6 +90,7 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
   customFeeds,
   syncLogs,
   syncLogsLoading,
+  onRefreshSyncLogs,
   globalSettings,
   globalSettingsLoading,
   savingGlobalSettings,
@@ -110,6 +114,18 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
 }) => {
   // Sub-Tab Navigation for Admin view
   const [adminActiveSubTab, setAdminActiveSubTab] = useState<'users' | 'analytics' | 'logs' | 'settings' | 'catalog' | 'invoices'>('users');
+
+  const handleClearSyncLogs = async () => {
+    if (!confirm('🚨 Ви дійсно хочете очистити весь журнал синхронізацій з бази даних?')) return;
+    try {
+      const { error } = await supabase.from('sync_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      if (error) throw error;
+      if (onRefreshSyncLogs) await onRefreshSyncLogs();
+      showToast('✅ Журнал оновлень очищено');
+    } catch (e: any) {
+      showToast('⚠️ Помилка очищення: ' + e.message);
+    }
+  };
 
   // Generator tree collapse sets
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -1458,9 +1474,30 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
               {/* SUB-TAB: SYNC LOGS */}
               {adminActiveSubTab === 'logs' && (
                 <div className="card flex flex-col gap-4">
-                  <div className="border-b border-[var(--border)] pb-2">
-                    <h2 className="text-sm font-black text-[var(--text)]">Журнал останніх синхронізацій прайсів</h2>
-                    <p className="text-[10px] text-[var(--text2)] font-semibold mt-0.5">Відображаються сесії імпорту з серверів постачальників.</p>
+                  <div className="flex justify-between items-center border-b border-[var(--border)] pb-2 flex-wrap gap-2">
+                    <div>
+                      <h2 className="text-sm font-black text-[var(--text)]">Журнал останніх синхронізацій прайсів</h2>
+                      <p className="text-[10px] text-[var(--text2)] font-semibold mt-0.5">Відображаються сесії імпорту з серверів постачальників.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => onRefreshSyncLogs?.()}
+                        disabled={syncLogsLoading}
+                        className="gbtn border border-[var(--border)] py-1.5 px-3 rounded-xl text-xs font-black hover:bg-[var(--surface2)] flex items-center gap-1.5"
+                      >
+                        <RefreshCw size={12} className={syncLogsLoading ? 'animate-spin' : ''} />
+                        Оновити
+                      </button>
+                      {syncLogs.length > 0 && (
+                        <button
+                          onClick={handleClearSyncLogs}
+                          className="gbtn border border-red-500/20 text-red-500 py-1.5 px-3 rounded-xl text-xs font-black hover:bg-red-500/5 flex items-center gap-1.5"
+                        >
+                          <Trash2 size={12} />
+                          Очистити
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {syncLogsLoading ? (

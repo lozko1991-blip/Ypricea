@@ -907,6 +907,7 @@ export default function Cabinet() {
             customFeeds={customFeeds}
             syncLogs={syncLogs}
             syncLogsLoading={syncLogsLoading}
+            onRefreshSyncLogs={fetchSyncLogs}
             globalSettings={globalSettings}
             globalSettingsLoading={globalSettingsLoading}
             savingGlobalSettings={savingGlobalSettings}
