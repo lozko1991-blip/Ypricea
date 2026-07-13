@@ -1032,6 +1032,7 @@ class SupabaseTranslator {
     this.localCache = new Map();
     this.hasSupabase = !!(this.supabaseUrl && this.supabaseKey);
     this.tableOk = true;
+    this.stats = { cache: 0, api: 0, errors: 0 };
     
     // Load local cache file if exists
     this.cacheFilePath = path.join('presets', 'translation-cache.json');
@@ -1072,6 +1073,7 @@ class SupabaseTranslator {
 
     // 1. Check local memory/file cache
     if (this.localCache.has(hash)) {
+      this.stats.cache++;
       return this.localCache.get(hash);
     }
 
@@ -1090,6 +1092,7 @@ class SupabaseTranslator {
           if (data && data.length > 0 && data[0].uk_text) {
             const ukText = data[0].uk_text;
             this.localCache.set(hash, ukText);
+            this.stats.cache++;
             return ukText;
           }
         } else if (res.status === 404) {
@@ -1111,8 +1114,10 @@ class SupabaseTranslator {
       if (!res.ok) throw new Error(`Google HTTP ${res.status}`);
       const data = await res.json();
       ukText = data[0].map(x => x[0]).join('');
+      this.stats.api++;
     } catch (err) {
       console.warn(`⚠️ Помилка автоматичного перекладу для "${cleanText.slice(0, 30)}...":`, err.message);
+      this.stats.errors++;
       return text;
     }
 
@@ -1424,6 +1429,7 @@ async function buildUserCustomExports() {
       o.finalPrice = Math.max(1, Math.round(finalPrice));
     }
 
+    let translatedCount = 0;
     for (const o of filteredOffers) {
       let vendor = o.vendor || '';
       let name = o.name || '';
@@ -1508,6 +1514,13 @@ async function buildUserCustomExports() {
       o.description_ua = descUa;
       o.pictures = pics;
       o.params = params;
+
+      translatedCount++;
+      if (translatedCount % 100 === 0 || translatedCount === filteredOffers.length) {
+        if (translator.stats.api > 0 || translator.stats.cache > 0) {
+          console.log(`   ⏳ [переклад] Оброблено товарів: ${translatedCount}/${filteredOffers.length} (Кеш: ${translator.stats.cache}, API: ${translator.stats.api}, Помилок: ${translator.stats.errors})`);
+        }
+      }
     }
 
     const promOffers = filteredOffers.map(o => ({
@@ -1517,7 +1530,7 @@ async function buildUserCustomExports() {
       drop: parseFloat(o.price) || 0,
       finalPrice: o.finalPrice,
       priceOld: o.price_old || o.priceOld || null,
-      stockQuantity: o.stock_quantity !== undefined ? o.stock_quantity : (o.available ? 100 : 0),
+      stockQuantity: o.stock_quantity !== undefined ? o.stock_quantity : null,
       name: o.name,
       name_ua: o.name_ua,
       vendorCode: o.vendorCode,
