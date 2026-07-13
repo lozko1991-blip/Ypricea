@@ -19,6 +19,8 @@ create table if not exists public.user_feeds (
 
 -- 2. Add columns if table exists but they are missing (migration guard)
 alter table public.user_feeds add column if not exists format text not null default 'prom';
+alter table public.user_feeds add column if not exists suppliers jsonb not null default '[]'::jsonb;
+alter table public.user_feeds add column if not exists rules jsonb not null default '[]'::jsonb;
 alter table public.user_feeds add column if not exists category_mapping jsonb not null default '{}'::jsonb;
 
 -- 3. Enable Row Level Security (RLS)

@@ -65,6 +65,8 @@ create table if not exists public.user_feeds (
 
 -- Safe migrations guard for user_feeds (if table already existed)
 alter table public.user_feeds add column if not exists format text not null default 'prom';
+alter table public.user_feeds add column if not exists suppliers jsonb not null default '[]'::jsonb;
+alter table public.user_feeds add column if not exists rules jsonb not null default '[]'::jsonb;
 alter table public.user_feeds add column if not exists category_mapping jsonb not null default '{}'::jsonb;
 alter table public.user_feeds add column if not exists emergency_stock_zero boolean not null default false;
 
