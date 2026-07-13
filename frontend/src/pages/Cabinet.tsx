@@ -740,7 +740,8 @@ export default function Cabinet() {
     const jsonContent = JSON.stringify(feed, null, 2);
 
     try {
-      // 1. Save to Supabase user_feeds table
+      // ── КРОК 1: Суpabase (ОБОВ'ЯЗКОВО) ──────────────────────────────────
+      // Це первинне сховище. Помилка тут = критична, зупиняємо.
       const { error: sbError } = await supabase
         .from('user_feeds')
         .upsert({
@@ -755,55 +756,59 @@ export default function Cabinet() {
 
       if (sbError) throw new Error('Помилка збереження в Supabase: ' + sbError.message);
 
-      // 2. Push JSON configuration file to GitHub
-      const owner = 'lozko1991-blip';
-      const repo = 'Ypricea';
-      const path = `presets/${presetName}.json`;
-      const commitMessage = `feat: update custom user feed ${feed.name}`;
-      const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
-      
-      const headers: Record<string, string> = {
-        'Authorization': `Bearer ${ghTokenVal}`,
-        'Accept': 'application/vnd.github+json',
-        'Content-Type': 'application/json'
-      };
+      // ── КРОК 2: GitHub presets/ backup (НЕОБОВ'ЯЗКОВО) ──────────────────
+      // Це резервна копія для fallback якщо Supabase тимчасово недоступна.
+      // Не кидаємо помилку якщо fails — клієнт може не мати PAT токену.
+      const ghToken = ghTokenVal || localStorage.getItem('utrade_gh_pat') || '';
+      if (ghToken) {
+        try {
+          const owner = 'lozko1991-blip';
+          const repo = 'Ypricea';
+          const filePath = `presets/${presetName}.json`;
+          const fileUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
+          const ghHeaders: Record<string, string> = {
+            'Authorization': `Bearer ${ghToken}`,
+            'Accept': 'application/vnd.github+json',
+            'Content-Type': 'application/json'
+          };
 
-      let sha: string | undefined = undefined;
-      try {
-        const r = await fetch(url, { headers });
-        if (r.ok) {
-          const j = await r.json();
-          sha = j.sha;
+          // Get existing SHA (needed for update)
+          let sha: string | undefined = undefined;
+          const existing = await fetch(fileUrl, { headers: ghHeaders }).catch(() => null);
+          if (existing?.ok) {
+            const j = await existing.json().catch(() => ({}));
+            sha = j.sha;
+          }
+
+          const base64Content = btoa(encodeURIComponent(jsonContent).replace(/%([0-9A-F]{2})/g, (_, p) =>
+            String.fromCharCode(parseInt(p, 16))
+          ));
+
+          const body: Record<string, unknown> = {
+            message: `backup: user feed preset ${feed.name}`,
+            content: base64Content
+          };
+          if (sha) body.sha = sha;
+
+          await fetch(fileUrl, {
+            method: 'PUT',
+            headers: ghHeaders,
+            body: JSON.stringify(body)
+          });
+          // Even if this fails silently — Supabase is the source of truth
+        } catch (ghErr) {
+          console.warn('[handleSaveCustomFeed] GitHub backup push failed (non-critical):', ghErr);
         }
-      } catch {}
-
-      const base64Content = btoa(encodeURIComponent(jsonContent).replace(/%([0-9A-F]{2})/g, (_, p) => {
-        return String.fromCharCode(parseInt(p, 16));
-      }));
-
-      const body: any = {
-        message: commitMessage,
-        content: base64Content
-      };
-      if (sha) body.sha = sha;
-
-      const res = await fetch(url, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(body)
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || `GitHub API error ${res.status}`);
       }
 
+      // ── КРОК 3: Показуємо успіх ─────────────────────────────────────────
       showToast(`✅ Фід "${feed.name}" збережено!`);
-      
-      // Smart queue-aware rebuild: waits for any running build to finish,
-      // deduplicates concurrent client saves, retries on transient errors.
+
+      // ── КРОК 4: Smart queue rebuild ──────────────────────────────────────
+      // Чекає вільного вікна, дедуплікує, retry при помилках.
+      // Якщо токену немає — cron підхопить зміни з Supabase через ≤2 год.
       smartTriggerRebuild(feed.name);
-      
+
       fetchCustomFeeds();
     } catch (e: any) {
       showToast('⚠️ Помилка збереження фіду: ' + e.message);
