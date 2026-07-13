@@ -190,6 +190,7 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
   const [suggestionSearchQuery, setSuggestionSearchQuery] = useState('');
   const [activeRuleTab, setActiveRuleTab] = useState<'markup' | 'filter' | 'mapping' | 'other'>('markup');
   const [mappingFilter, setMappingFilter] = useState<'all' | 'unmapped' | 'mapped'>('all');
+  const [idfWeights, setIdfWeights] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (isEditingFeed && activeRuleTab === 'mapping') {
@@ -201,7 +202,27 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
             .select('id, name')
             .eq('marketplace', feedFormat);
           if (error) throw error;
-          setMarketplaceCategories(data || []);
+          
+          const loadedCats = data || [];
+          setMarketplaceCategories(loadedCats);
+          
+          // Calculate IDF weights dynamically in the browser
+          const documentCount = loadedCats.length;
+          const wordFrequency: Record<string, number> = {};
+          
+          loadedCats.forEach(cat => {
+            const tokens = tokenizeAndClean(cat.name);
+            const uniqueWords = new Set(tokens);
+            uniqueWords.forEach(w => {
+              wordFrequency[w] = (wordFrequency[w] || 0) + 1;
+            });
+          });
+          
+          const weights: Record<string, number> = {};
+          for (const [word, count] of Object.entries(wordFrequency)) {
+            weights[word] = Math.log(documentCount / count) + 1.0;
+          }
+          setIdfWeights(weights);
         } catch (e: any) {
           console.warn('Failed to load marketplace categories:', e.message);
         } finally {
@@ -326,11 +347,19 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
 
     const newMapping = { ...feedCatMapping };
 
-    // Pre-tokenize and clean marketplace categories for high performance
-    const tokenizedMkt = marketplaceCategories.map(cat => ({
-      ...cat,
-      tokens: tokenizeAndClean(cat.name)
-    }));
+    // Pre-calculate sum of IDF weights for all Prom categories
+    const tokenizedMkt = marketplaceCategories.map(cat => {
+      const tokens = tokenizeAndClean(cat.name);
+      const leafName = cat.name.split('>').pop() || '';
+      const leafTokens = tokenizeAndClean(leafName);
+      const sumWeight = tokens.reduce((sum, w) => sum + (idfWeights[w] || 2.0), 0);
+      return {
+        ...cat,
+        tokens,
+        leafTokens,
+        sumWeight
+      };
+    });
 
     let mappedCount = 0;
 
@@ -339,29 +368,35 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
         const srcWords = tokenizeAndClean(cat.name);
         if (srcWords.length === 0) return;
 
+        const srcWeightsSum = srcWords.reduce((sum, w) => sum + (idfWeights[w] || 2.0), 0);
+
         let bestItem: any = null;
-        let maxOverlap = 0;
-        let bestScore = 0;
+        let maxScore = 0;
 
         for (const target of tokenizedMkt) {
-          let overlap = 0;
-          for (const sw of srcWords) {
-            if (target.tokens.some(tw => areWordsSimilar(sw, tw))) {
-              overlap++;
+          let overlapWeight = 0;
+          
+          for (const tw of target.tokens) {
+            const weight = idfWeights[tw] || 2.0;
+            const matches = srcWords.some(sw => areWordsSimilar(sw, tw));
+            if (matches) {
+              const isLeaf = target.leafTokens.some(lw => areWordsSimilar(lw, tw));
+              overlapWeight += weight * (isLeaf ? 1.5 : 1.0);
             }
           }
 
-          if (overlap > 0) {
-            const score = overlap / (srcWords.length + target.tokens.length - overlap);
-            if (overlap > maxOverlap || (overlap === maxOverlap && score > bestScore)) {
-              maxOverlap = overlap;
-              bestScore = score;
+          if (overlapWeight > 0) {
+            const unionWeight = srcWeightsSum + target.sumWeight - overlapWeight;
+            const score = overlapWeight / unionWeight;
+            
+            if (score > maxScore) {
+              maxScore = score;
               bestItem = target;
             }
           }
         }
 
-        if (bestItem && bestScore >= 0.15) {
+        if (bestItem && maxScore >= 0.12) {
           newMapping[cat.id] = { id: bestItem.id, name: bestItem.name };
           mappedCount++;
         }
@@ -1018,16 +1053,30 @@ export const ClientFeeds: React.FC<ClientFeedsProps> = ({
                                         const recs: Array<{ id: string; name: string; score: number }> = [];
                                         
                                         if (srcWords.length > 0) {
+                                          const srcWeightsSum = srcWords.reduce((sum, w) => sum + (idfWeights[w] || 2.0), 0);
+                                          
                                           for (const target of marketplaceCategories) {
                                             const targetWords = tokenizeAndClean(target.name);
-                                            let overlap = 0;
-                                            for (const sw of srcWords) {
-                                              if (targetWords.some(tw => areWordsSimilar(sw, tw))) {
-                                                overlap++;
+                                            const leafName = target.name.split('>').pop() || '';
+                                            const leafWords = tokenizeAndClean(leafName);
+                                            
+                                            let overlapWeight = 0;
+                                            let targetWeightsSum = 0;
+                                            
+                                            for (const tw of targetWords) {
+                                              const weight = idfWeights[tw] || 2.0;
+                                              targetWeightsSum += weight;
+                                              
+                                              const matches = srcWords.some(sw => areWordsSimilar(sw, tw));
+                                              if (matches) {
+                                                const isLeaf = leafWords.some(lw => areWordsSimilar(lw, tw));
+                                                overlapWeight += weight * (isLeaf ? 1.5 : 1.0);
                                               }
                                             }
-                                            if (overlap > 0) {
-                                              const score = overlap / (srcWords.length + targetWords.length - overlap);
+                                            
+                                            if (overlapWeight > 0) {
+                                              const unionWeight = srcWeightsSum + targetWeightsSum - overlapWeight;
+                                              const score = overlapWeight / unionWeight;
                                               recs.push({ id: target.id, name: target.name, score });
                                             }
                                           }
