@@ -10,8 +10,11 @@ on:
     branches: [ main ]
     paths:
       - 'process.mjs'
+      - 'customExports.mjs'
+      - 'presets/**'
       - 'frontend/**'
       - '.github/workflows/update.yml'
+      - 'suppliers/**'
 
 permissions:
   contents: read

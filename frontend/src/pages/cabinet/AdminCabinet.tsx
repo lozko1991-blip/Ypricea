@@ -64,6 +64,7 @@ interface AdminCabinetProps {
   onSaveGhToken: () => void;
   showToast: (msg: string) => void;
   workflowStatus?: { status: string | null; conclusion: string | null; updated_at: string | null };
+  onSmartRebuild?: (label: string) => void;
 }
 
 export const AdminCabinet: React.FC<AdminCabinetProps> = ({
@@ -112,7 +113,8 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
   setGhTokenVal,
   onSaveGhToken,
   showToast,
-  workflowStatus
+  workflowStatus,
+  onSmartRebuild
 }) => {
   // Sub-Tab Navigation for Admin view
   const [adminActiveSubTab, setAdminActiveSubTab] = useState<'users' | 'analytics' | 'logs' | 'settings' | 'catalog' | 'invoices'>('users');
@@ -399,8 +401,14 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
       });
 
       if (res.ok) {
-        showToast(`✅ Пресет "${presetName}" успішно записано у GitHub!`);
+        showToast(`✅ Пресет "${presetName}" записано у GitHub! Запускаємо оновлення...`);
         setSavePresetModalOpen(false);
+        // Trigger smart rebuild via queue — waits for running builds, deduplicates
+        if (onSmartRebuild) {
+          onSmartRebuild(`пресет "${presetName}"`);
+        } else {
+          handleTriggerBuild();
+        }
       } else {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.message || `API error ${res.status}`);

@@ -1104,6 +1104,7 @@ export default function Cabinet() {
             onSaveGhToken={handleSaveGhToken}
             showToast={showToast}
             workflowStatus={workflowStatus}
+            onSmartRebuild={smartTriggerRebuild}
           />
         )}
       </div>
