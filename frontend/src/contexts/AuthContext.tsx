@@ -48,6 +48,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!error && data) {
       setProfile(data as Profile);
     } else {
+      if (error) {
+        console.error('Error fetching profile from database profiles table:', error);
+      }
       setProfile(null);
     }
   };
