@@ -628,8 +628,7 @@ export default function Cabinet() {
           format: feed.format,
           suppliers: feed.suppliers,
           rules: feed.rules,
-          category_mapping: feed.category_mapping,
-          updated_at: new Date().toISOString()
+          category_mapping: feed.category_mapping
         }, { onConflict: 'token' });
 
       if (sbError) throw new Error('Помилка збереження в Supabase: ' + sbError.message);
