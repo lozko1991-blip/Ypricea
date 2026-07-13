@@ -12,6 +12,7 @@ import { SaxesParser } from 'saxes';
 import iconv from 'iconv-lite';
 import dns from 'node:dns/promises';
 import { isIP } from 'node:net';
+import crypto from 'node:crypto';
 
 async function validateUrl(urlStr) {
   try {
@@ -1024,9 +1025,131 @@ function parseCustomXml(filePath, supplierPrefix) {
   });
 }
 
+class SupabaseTranslator {
+  constructor() {
+    this.supabaseUrl = process.env.SUPABASE_URL;
+    this.supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    this.localCache = new Map();
+    this.hasSupabase = !!(this.supabaseUrl && this.supabaseKey);
+    this.tableOk = true;
+    
+    // Load local cache file if exists
+    this.cacheFilePath = path.join('presets', 'translation-cache.json');
+    if (fs.existsSync(this.cacheFilePath)) {
+      try {
+        const fileContent = fs.readFileSync(this.cacheFilePath, 'utf8');
+        const parsed = JSON.parse(fileContent);
+        for (const [k, v] of Object.entries(parsed)) {
+          this.localCache.set(k, v);
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
+
+  getHash(text) {
+    return crypto.createHash('md5').update(String(text || '')).digest('hex');
+  }
+
+  saveLocalCache() {
+    try {
+      const obj = {};
+      for (const [k, v] of this.localCache.entries()) {
+        obj[k] = v;
+      }
+      fs.mkdirSync(path.dirname(this.cacheFilePath), { recursive: true });
+      fs.writeFileSync(this.cacheFilePath, JSON.stringify(obj, null, 2), 'utf8');
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  async translate(text, from = 'ru', to = 'uk') {
+    if (!text || !text.trim()) return '';
+    const cleanText = text.trim();
+    const hash = this.getHash(cleanText);
+
+    // 1. Check local memory/file cache
+    if (this.localCache.has(hash)) {
+      return this.localCache.get(hash);
+    }
+
+    // 2. Check Supabase DB
+    if (this.hasSupabase && this.tableOk) {
+      try {
+        const url = `${this.supabaseUrl.replace(/\/$/, '')}/rest/v1/translation_cache?hash=eq.${hash}&select=uk_text`;
+        const res = await fetch(url, {
+          headers: {
+            'apikey': this.supabaseKey,
+            'Authorization': `Bearer ${this.supabaseKey}`
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.length > 0 && data[0].uk_text) {
+            const ukText = data[0].uk_text;
+            this.localCache.set(hash, ukText);
+            return ukText;
+          }
+        } else if (res.status === 404) {
+          this.tableOk = false;
+          console.warn('⚠️ Таблиця translation_cache не знайдена в Supabase. Використовуємо локальний режим.');
+        }
+      } catch (err) {
+        console.warn('⚠️ Помилка звернення до Supabase для перекладу:', err.message);
+      }
+    }
+
+    // 3. Call Google Translate API
+    let ukText = '';
+    try {
+      // Small delay to prevent HTTP 429
+      await new Promise(r => setTimeout(r, 200));
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${from}&tl=${to}&dt=t&q=${encodeURIComponent(cleanText)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Google HTTP ${res.status}`);
+      const data = await res.json();
+      ukText = data[0].map(x => x[0]).join('');
+    } catch (err) {
+      console.warn(`⚠️ Помилка автоматичного перекладу для "${cleanText.slice(0, 30)}...":`, err.message);
+      return text;
+    }
+
+    if (ukText) {
+      this.localCache.set(hash, ukText);
+      
+      // Save to Supabase
+      if (this.hasSupabase && this.tableOk) {
+        try {
+          const url = `${this.supabaseUrl.replace(/\/$/, '')}/rest/v1/translation_cache`;
+          await fetch(url, {
+            method: 'POST',
+            headers: {
+              'apikey': this.supabaseKey,
+              'Authorization': `Bearer ${this.supabaseKey}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'resolution=merge-duplicates'
+            },
+            body: JSON.stringify({ hash, ru_text: cleanText, uk_text: ukText })
+          });
+        } catch (err) {
+          // ignore
+        }
+      } else {
+        // Save to local file cache
+        this.saveLocalCache();
+      }
+    }
+
+    return ukText || text;
+  }
+}
+
 async function buildUserCustomExports() {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const translator = new SupabaseTranslator();
 
   let presets = [];
   if (supabaseUrl && supabaseKey) {
@@ -1315,6 +1438,15 @@ async function buildUserCustomExports() {
         if (rule.scope === 'supplier' && !o.id.startsWith(rule.scope_value + '_')) continue;
 
         const cfg = rule.config || {};
+
+        if (rule.type === 'translate_to_uk') {
+          if (!nameUa || nameUa === name) {
+            nameUa = await translator.translate(name, 'ru', 'uk');
+          }
+          if (!descUa || descUa === desc) {
+            descUa = await translator.translate(desc, 'ru', 'uk');
+          }
+        }
 
         if (rule.type === 'brand' && !vendor && cfg.default_brand) {
           vendor = cfg.default_brand;
