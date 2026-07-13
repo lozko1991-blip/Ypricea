@@ -1104,9 +1104,8 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
                                 </div>
                               </div>
                               
-                              {!isMe && (
                                 <div className="flex gap-1.5">
-                                  {u.status !== 'active' && (
+                                  {!isMe && u.status !== 'active' && (
                                     <button 
                                       onClick={() => handleSetUserStatus(u.id, 'active')}
                                       className="gbtn bg-emerald-500 text-white py-1 px-2.5 rounded-lg text-[10px]"
@@ -1114,7 +1113,7 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
                                       Дозволити
                                     </button>
                                   )}
-                                  {u.status !== 'blocked' && (
+                                  {!isMe && u.status !== 'blocked' && (
                                     <button 
                                       onClick={() => handleSetUserStatus(u.id, 'blocked')}
                                       className="gbtn bg-red-500 text-white py-1 px-2.5 rounded-lg text-[10px]"
@@ -1129,7 +1128,6 @@ export const AdminCabinet: React.FC<AdminCabinetProps> = ({
                                     Налаштувати ⚙️
                                   </button>
                                 </div>
-                              )}
                             </div>
 
                             {/* Extended Subscriptions, Wallet Balance and Supplier Permissions Configurator */}
