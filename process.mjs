@@ -622,7 +622,10 @@ function buildPromXml(offers, catById, opts = {}) {
   catSorted.forEach(c => {
     const pfxId     = catPfx + c.id;
     const pfxParent = c.parentId ? (catPfx + c.parentId) : '';
-    x += `  <category id="${escX(pfxId)}"${pfxParent ? ` parentId="${escX(pfxParent)}"` : ''}>${escX(c.name)}</category>\n`;
+    let attrs = `id="${escX(pfxId)}"`;
+    if (pfxParent) attrs += ` parentId="${escX(pfxParent)}"`;
+    if (c.eva_id) attrs += ` eva_id="${escX(c.eva_id)}"`;
+    x += `  <category ${attrs}>${escX(c.name)}</category>\n`;
   });
   x += `</categories>\n<offers>\n`;
 
@@ -643,7 +646,21 @@ function buildPromXml(offers, catById, opts = {}) {
     x += `<offer ${attrs}>\n`;
 
     const outPrice = (o.finalPrice != null) ? o.finalPrice : o.drop;
-    x += `  <price>${outPrice}</price>\n  <currencyId>UAH</currencyId>\n`;
+    x += `  <price>${outPrice}</price>\n`;
+
+    if (o.priceOld) {
+      const pOld = parseFloat(o.priceOld);
+      if (!isNaN(pOld) && pOld > outPrice) {
+        x += `  <price_old>${Math.round(pOld)}</price_old>\n`;
+      }
+    }
+
+    if (opts.format === 'eva' || o.stockQuantity !== undefined) {
+      const stockVal = o.stockQuantity !== undefined ? o.stockQuantity : (o.available !== false ? 100 : 0);
+      x += `  <stock_quantity>${stockVal}</stock_quantity>\n`;
+    }
+
+    x += `  <currencyId>UAH</currencyId>\n`;
     x += `  <categoryId>${escX(catId)}</categoryId>\n`;
     (o.pics || []).forEach(p => { if (p) x += `  <picture>${escX(p)}</picture>\n`; });
     if (o.vendorCode) x += `  <vendorCode>${escX(o.vendorCode)}</vendorCode>\n`;
@@ -657,7 +674,10 @@ function buildPromXml(offers, catById, opts = {}) {
       if (!pm || !pm.name) return;
       const pName  = escX(deEsc(pm.name));
       const pValue = escX(deEsc(String(pm.value ?? '')));
-      if (pValue) x += `  <param name="${pName}">${pValue}</param>\n`;
+      let pAttrs = `name="${pName}"`;
+      if (pm.paramid) pAttrs += ` paramid="${escX(pm.paramid)}"`;
+      if (pm.valueid) pAttrs += ` valueid="${escX(pm.valueid)}"`;
+      if (pValue) x += `  <param ${pAttrs}>${pValue}</param>\n`;
     });
     x += `</offer>\n`;
   });
@@ -886,7 +906,12 @@ function parseCustomXml(filePath, supplierPrefix) {
       } else if (inOffer && (n === 'description' || n === 'description_ua' || n === 'descriptionUa' || n === 'desc')) {
         inDesc = true; descBuf = ''; descDepth = 0;
       } else if (inOffer && (n === 'param' || n === 'property' || n === 'attribute' || n === 'characteristic')) {
-        offer.curParam = { name: node.attributes.name || '', value: '' };
+        offer.curParam = {
+          name: node.attributes.name || '',
+          paramid: node.attributes.paramid || null,
+          valueid: node.attributes.valueid || null,
+          value: ''
+        };
       }
       tag = n; textBuf = ''; cdataBuf = '';
     });
@@ -949,6 +974,8 @@ function parseCustomXml(filePath, supplierPrefix) {
           // If no optic cost price is specified, default to retail price
           offer.price_opt = costVal || priceVal || '0';
 
+          offer.price_old = rf.price_old || rf.old_price || rf.priceOld || rf.oldPrice || null;
+
           offer.description = offer.description || rf.description || rf.desc || '';
           offer.description_ua = offer.description_ua || rf.description_ua || rf.descriptionUa || offer.description;
 
@@ -961,9 +988,12 @@ function parseCustomXml(filePath, supplierPrefix) {
           const stockVal = rf.stock_quantity || rf.quantity_in_stock || rf.stock;
           if (stockVal !== undefined) {
             const stockNum = parseInt(stockVal);
+            offer.stock_quantity = isNaN(stockNum) ? 100 : stockNum;
             if (!isNaN(stockNum) && stockNum <= 0) {
               offer.available = false;
             }
+          } else {
+            offer.stock_quantity = offer.available ? 100 : 0;
           }
 
           // Clean up rawFields before storing to optimize memory
@@ -1108,7 +1138,7 @@ async function buildUserCustomExports() {
 
     const catById = {};
     mergedCats.forEach(c => {
-      catById[c.id] = { id: c.id, name: c.name, parentId: c.parentId || null };
+      catById[c.id] = { id: c.id, name: c.name, parentId: c.parentId || null, eva_id: c.eva_id || null };
     });
 
     const childrenOf = {};
@@ -1122,6 +1152,9 @@ async function buildUserCustomExports() {
       if (mapped && mapped.id) {
         c.id = String(mapped.id);
         c.name = mapped.name || c.name;
+        if (mapped.eva_id) {
+          c.eva_id = String(mapped.eva_id);
+        }
       }
     });
 
@@ -1135,7 +1168,7 @@ async function buildUserCustomExports() {
 
     const mappedCatById = {};
     mergedCats.forEach(c => {
-      mappedCatById[c.id] = { id: c.id, name: c.name, parentId: c.parentId || null };
+      mappedCatById[c.id] = { id: c.id, name: c.name, parentId: c.parentId || null, eva_id: c.eva_id || null };
     });
 
     const mappedChildrenOf = {};
@@ -1351,6 +1384,8 @@ async function buildUserCustomExports() {
       cat: o.categoryId,
       drop: parseFloat(o.price) || 0,
       finalPrice: o.finalPrice,
+      priceOld: o.price_old || o.priceOld || null,
+      stockQuantity: o.stock_quantity !== undefined ? o.stock_quantity : (o.available ? 100 : 0),
       name: o.name,
       name_ua: o.name_ua,
       vendorCode: o.vendorCode,
@@ -1367,7 +1402,8 @@ async function buildUserCustomExports() {
       catPrefix: preset.catPrefix || '',
       addBrand: !!preset.addBrand,
       defaultBrand: preset.defaultBrand || '',
-      fillParams: !!preset.fillParams
+      fillParams: !!preset.fillParams,
+      format: preset.format || 'prom'
     };
 
     const outPath = path.join(CONFIG.OUT_DIR, 'exports', name + '.xml');
