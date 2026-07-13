@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
   Package, 
   User, 
@@ -158,6 +158,128 @@ export default function Cabinet() {
     const interval = setInterval(fetchWorkflowStatus, 20000);
     return () => clearInterval(interval);
   }, [ghTokenVal]);
+
+  // ── SMART REBUILD QUEUE ──────────────────────────────────────────────────
+  // Shared pending-rebuild flag — prevents duplicate dispatches when multiple
+  // clients save within the same build window.
+  const rebuildPendingRef = useRef(false);
+  const rebuildTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /**
+   * smartTriggerRebuild:
+   *  1. If no build is running → dispatch immediately.
+   *  2. If a build is already running → wait until it finishes, then dispatch.
+   *  3. Deduplicates: only one pending dispatch at a time regardless of how
+   *     many clients saved within the same window.
+   *  4. Retries up to `maxRetries` times with `retryDelayMs` pause between
+   *     attempts if dispatch fails or GitHub is temporarily unavailable.
+   */
+  const smartTriggerRebuild = useCallback(async (
+    feedName: string,
+    opts: { maxWaitMs?: number; retryDelayMs?: number; maxRetries?: number } = {}
+  ) => {
+    const { maxWaitMs = 25 * 60 * 1000, retryDelayMs = 30_000, maxRetries = 5 } = opts;
+    const ghToken = localStorage.getItem('utrade_gh_pat') || ghTokenVal;
+    if (!ghToken) return;
+
+    const repoUrl = localStorage.getItem('utrade_gh_repo') || 'https://github.com/lozko1991-blip/Ypricea.git';
+    const cleanUrl = repoUrl.replace('.git', '');
+    const parts = cleanUrl.split('/');
+    const repoName  = parts.pop();
+    const repoOwner = parts.pop();
+    if (!repoOwner || !repoName) return;
+
+    // If another feed save already queued a rebuild — just update the toast
+    // so the user knows their changes are included in the upcoming build.
+    if (rebuildPendingRef.current) {
+      showToast(`⏳ "${feedName}" додано до черги. Перебудова вже запланована…`);
+      return;
+    }
+
+    rebuildPendingRef.current = true;
+    showToast(`⏳ "${feedName}" збережено. Очікуємо вільного вікна для оновлення…`);
+
+    const startedAt = Date.now();
+    let attempts = 0;
+
+    const checkAndDispatch = async (): Promise<void> => {
+      // Timeout guard
+      if (Date.now() - startedAt > maxWaitMs) {
+        rebuildPendingRef.current = false;
+        showToast('⚠️ Не вдалося запустити rebuild — перевищено час очікування.');
+        return;
+      }
+
+      // Fetch latest workflow status
+      let isRunning = false;
+      try {
+        const res = await fetch(
+          `https://api.github.com/repos/${repoOwner}/${repoName}/actions/runs?per_page=1`,
+          { headers: { Authorization: `Bearer ${ghToken}`, Accept: 'application/vnd.github+json' } }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const run = data.workflow_runs?.[0];
+          isRunning = run?.status === 'in_progress' || run?.status === 'queued';
+          // Also refresh UI badge
+          if (run) setWorkflowStatus({ status: run.status, conclusion: run.conclusion, updated_at: run.updated_at });
+        }
+      } catch {
+        // Network glitch — treat as running and retry later
+        isRunning = true;
+      }
+
+      if (isRunning) {
+        // Current build occupies the runner — wait and retry
+        showToast(`⏳ GitHub зайнятий іншим оновленням. Повтор через 30с… (спроба ${attempts + 1}/${maxRetries})`);
+        rebuildTimerRef.current = setTimeout(checkAndDispatch, retryDelayMs);
+        return;
+      }
+
+      // Runner is free — dispatch!
+      attempts++;
+      try {
+        const dispatchRes = await fetch(
+          `https://api.github.com/repos/${repoOwner}/${repoName}/dispatches`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${ghToken}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ event_type: 'manual_rebuild' })
+          }
+        );
+
+        if (dispatchRes.status === 204) {
+          rebuildPendingRef.current = false;
+          showToast(`🚀 Оновлення "${feedName}" запущено в GitHub Actions! (~3–5 хв)`);
+          // Refresh status after a short delay so the badge updates
+          setTimeout(fetchWorkflowStatus, 5000);
+        } else if (attempts < maxRetries) {
+          // Dispatch failed (rate-limit, transient error) — retry
+          rebuildTimerRef.current = setTimeout(checkAndDispatch, retryDelayMs);
+        } else {
+          rebuildPendingRef.current = false;
+          showToast('⚠️ Не вдалося тригернути rebuild після ' + maxRetries + ' спроб.');
+        }
+      } catch {
+        if (attempts < maxRetries) {
+          rebuildTimerRef.current = setTimeout(checkAndDispatch, retryDelayMs);
+        } else {
+          rebuildPendingRef.current = false;
+          showToast('⚠️ Помилка мережі при запуску rebuild.');
+        }
+      }
+    };
+
+    // Kick off the first check immediately
+    checkAndDispatch();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ghTokenVal]);
+
+  // Cleanup pending timer on unmount
+  useEffect(() => () => {
+    if (rebuildTimerRef.current) clearTimeout(rebuildTimerRef.current);
+  }, []);
+  // ────────────────────────────────────────────────────────────────────────
 
   // Fetch customer orders from Supabase
   const fetchOrders = async () => {
@@ -676,10 +798,11 @@ export default function Cabinet() {
         throw new Error(err.message || `GitHub API error ${res.status}`);
       }
 
-      showToast(`🚀 Фід "${feed.name}" збережено та надіслано на автозлиття!`);
+      showToast(`✅ Фід "${feed.name}" збережено!`);
       
-      // Auto dispatch manual build trigger on save for instant processing
-      handleTriggerBuild();
+      // Smart queue-aware rebuild: waits for any running build to finish,
+      // deduplicates concurrent client saves, retries on transient errors.
+      smartTriggerRebuild(feed.name);
       
       fetchCustomFeeds();
     } catch (e: any) {

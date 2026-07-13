@@ -2,7 +2,7 @@ name: Update price catalog
 
 on:
   schedule:
-    - cron: '0 */5 * * *'   # кожні 5 годин (UTC: 00,05,10,15,20)
+    - cron: '0 */2 * * *'   # кожні 2 години (UTC: 00,02,04,06,08,10,12,14,16,18,20,22)
   workflow_dispatch: {}      # ручний запуск кнопкою
   repository_dispatch:
     types: [ manual_rebuild ] # запуск через API з кабінету адміна
