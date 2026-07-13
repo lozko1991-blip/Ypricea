@@ -310,6 +310,56 @@ export function parseCustomXml(filePath, supplierPrefix) {
   });
 }
 
+export function cleanDescriptionForEva(text, nameUa, vendor) {
+  const fallback = `<p>${nameUa || 'Товар'} від виробника ${vendor || 'NoName'}.</p>`;
+  if (!text || !text.trim()) return fallback;
+
+  // 1. Decode HTML entities (double unescape)
+  let clean = deEsc(deEsc(text));
+
+  // 2. Remove script, style, iframe, video, audio tags with content
+  clean = clean.replace(/<(script|style|iframe|video|audio)[^>]*>[\s\S]*?<\/\1>/gi, '');
+  // Self-closing video, audio, iframe tags
+  clean = clean.replace(/<(video|audio|iframe)[^>]*\/>/gi, '');
+  // HTML comments
+  clean = clean.replace(/<!--[\s\S]*?-->/g, '');
+  // Remove img tags (EVA doesn't accept images in descriptions)
+  clean = clean.replace(/<img[^>]*\/?>/gi, '');
+
+  // 3. Remove URLs
+  clean = clean.replace(/https?:\/\/[^\s<]+|www\.[^\s<]+/gi, '');
+
+  // 4. Remove inline styles
+  clean = clean.replace(/\s+style=["'][^"']*["']/gi, '');
+
+  // 5. Remove empty HTML tags
+  clean = clean.replace(/<(\w+)[^>]*>\s*<\/\1>/g, '');
+
+  // 6. Limit description length (safe cut to avoid cutting tags)
+  const DESC_LIMIT = 2800;
+  if (clean.length > DESC_LIMIT) {
+    const cutPos = clean.lastIndexOf('>', DESC_LIMIT);
+    if (cutPos > 0) {
+      clean = clean.slice(0, cutPos + 1) + '...';
+    } else {
+      clean = clean.slice(0, DESC_LIMIT) + '...';
+    }
+  }
+
+  clean = clean.trim();
+
+  // 7. Ensure at least 30 characters of plain text
+  const plainText = clean.replace(/<[^>]+>/g, '').trim();
+  if (plainText.length < 30) {
+    return fallback;
+  }
+
+  // 8. Prevent breaking CDATA
+  clean = clean.replace(/]]>/g, ']] >');
+
+  return clean;
+}
+
 export function buildPromXml(offers, catById, opts = {}) {
   const idPfx   = String(opts.idPrefix  || '');
   const catPfx  = String(opts.catPrefix || '');
@@ -398,8 +448,14 @@ export function buildPromXml(offers, catById, opts = {}) {
     if (brand)        x += `  <vendor>${escX(brand)}</vendor>\n`;
     x += `  <name>${cdX(nameRu)}</name>\n`;
     x += `  <name_ua>${cdX(nameUa)}</name_ua>\n`;
-    if (o.desc)    x += `  <description>${cdX(o.desc)}</description>\n`;
-    if (o.desc_ua) x += `  <description_ua>${cdX(o.desc_ua)}</description_ua>\n`;
+    let dRu = o.desc || '';
+    let dUa = o.desc_ua || '';
+    if (opts.format === 'eva') {
+      dRu = cleanDescriptionForEva(dRu, nameRu, brand || o.vendor || 'NoName');
+      dUa = cleanDescriptionForEva(dUa, nameUa, brand || o.vendor || 'NoName');
+    }
+    if (dRu) x += `  <description>${cdX(dRu)}</description>\n`;
+    if (dUa) x += `  <description_ua>${cdX(dUa)}</description_ua>\n`;
     params.forEach(pm => {
       if (!pm || !pm.name) return;
       const pName  = escX(deEsc(pm.name));
