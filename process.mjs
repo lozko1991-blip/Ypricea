@@ -490,7 +490,7 @@ function writeSummary(meta, exportsMade) {
 }
 
 // ──────────── 5. Пише шардований каталог для сайту ────────────
-function writeShardedCatalog({ meta, keptCats, directCount, totalCount, products }) {
+async function writeShardedCatalog({ meta, keptCats, directCount, totalCount, products }) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const shardsDir = path.join(DATA_DIR, CONFIG.SHARDS_DIR);
   const descDir = path.join(DATA_DIR, CONFIG.DESC_DIR);
@@ -541,6 +541,41 @@ function writeShardedCatalog({ meta, keptCats, directCount, totalCount, products
       if (p.vendorCode) lite.v = p.vendorCode;
       if (p.name && p.name !== lite.n) lite.nr = p.name;
       if (p.pics && p.pics[0]) lite.i = p.pics[0];
+
+      // Extract useful keywords from description for better search matching
+      const descText = ((p.desc || '') + ' ' + (p.desc_ua || '')).replace(/<[^>]*>/g, ' ');
+      const kwMatches = descText.match(/[a-zA-Z0-9][-a-zA-Z0-9_]{2,24}/g);
+      if (kwMatches) {
+        const filteredKw = kwMatches.filter(w => /[a-zA-Z]/.test(w) || /[0-9]/.test(w));
+        if (filteredKw.length > 0) {
+          const uniqueKw = new Set();
+          for (const w of filteredKw) {
+            const low = w.toLowerCase();
+            uniqueKw.add(low);
+            
+            // Add variation without symbols (e.g. rb-2334 -> rb2334)
+            if (/[^a-z0-9]/.test(low)) {
+              uniqueKw.add(low.replace(/[^a-z0-9]/g, ''));
+            }
+            
+            // Split hyphens/slashes and add pieces (e.g. rb-2334 -> rb, 2334)
+            const parts = low.split(/[^a-z0-9]+/).filter(Boolean);
+            if (parts.length > 1) {
+              parts.forEach(pt => { if (pt.length >= 2) uniqueKw.add(pt); });
+            }
+            
+            // Split mixed letters and numbers (e.g. rb2334 -> rb, 2334)
+            const alphaNumParts = low.match(/[a-z]+|[0-9]+/g);
+            if (alphaNumParts && alphaNumParts.length > 1) {
+              alphaNumParts.forEach(pt => { if (pt.length >= 2) uniqueKw.add(pt); });
+            }
+          }
+          if (uniqueKw.size > 0) {
+            lite.k = Array.from(uniqueKw).join(' ');
+          }
+        }
+      }
+
       indexProducts.push(lite);
 
       const full = {
@@ -586,13 +621,22 @@ function writeShardedCatalog({ meta, keptCats, directCount, totalCount, products
   };
   const indexJson = JSON.stringify(index);
   fs.writeFileSync(path.join(DATA_DIR, 'index.json'), indexJson);
-  const indexGz = zlib.gzipSync(indexJson, { level: 9 });
-  fs.writeFileSync(path.join(DATA_DIR, 'index.json.gz'), indexGz);
+
+  // Reliable stream-based compression to prevent RangeError/OOM on large files
+  const { Readable } = await import('node:stream');
+  await pipeline(
+    Readable.from([indexJson]),
+    zlib.createGzip({ level: 9 }),
+    fs.createWriteStream(path.join(DATA_DIR, 'index.json.gz'))
+  );
 
   fs.writeFileSync(path.join(DATA_DIR, 'shard-map.json'), JSON.stringify(productLocation));
 
   const idxMb = (Buffer.byteLength(indexJson) / 1048576).toFixed(1);
-  const idxGzMb = (indexGz.length / 1048576).toFixed(2);
+  const idxGzSize = fs.existsSync(path.join(DATA_DIR, 'index.json.gz')) 
+    ? fs.statSync(path.join(DATA_DIR, 'index.json.gz')).size 
+    : 0;
+  const idxGzMb = (idxGzSize / 1048576).toFixed(2);
   const shardsMb = (shardBytes / 1048576).toFixed(1);
   const descMb = (descBytes / 1048576).toFixed(1);
   console.log(`   📚 Шардинг готовий:`);
@@ -693,7 +737,7 @@ function writeShardedCatalog({ meta, keptCats, directCount, totalCount, products
     totalProducts: allProducts.length,
   };
 
-  writeShardedCatalog({
+  await writeShardedCatalog({
     meta: shardMeta,
     keptCats: allCats,
     directCount, totalCount,

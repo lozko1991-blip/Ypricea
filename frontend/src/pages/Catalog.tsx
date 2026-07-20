@@ -37,6 +37,7 @@ interface CatalogProduct {
   s: string; // source
   b?: string; // brand
   v?: string; // vendorCode / SKU
+  k?: string; // keywords
 }
 
 interface Category {
@@ -134,21 +135,39 @@ function parseQuery(raw: string): SearchToken[] {
   });
 }
 
+function stripNonAlphaNum(s: string): string {
+  return String(s || '').toLowerCase().replace(/[^a-z0-9а-яіїє]/g, '');
+}
+
 // Fast on-demand product matching without pre-allocating millions of string objects
 function matchProduct(p: CatalogProduct, tokens: SearchToken[]): boolean {
   const normName = normalizeString(p.n);
+  const cleanName = stripNonAlphaNum(p.n);
   const normId = String(p.id).toLowerCase();
+  const cleanId = stripNonAlphaNum(String(p.id));
   const latName = cyrillicToLatin(normName);
+  const cleanLatName = stripNonAlphaNum(latName);
   const brand = p.b ? normalizeString(p.b) : '';
+  const cleanBrand = p.b ? stripNonAlphaNum(p.b) : '';
   const vendor = p.v ? normalizeString(p.v) : '';
+  const cleanVendor = p.v ? stripNonAlphaNum(p.v) : '';
+  const kw = p.k || '';
+  const cleanKw = stripNonAlphaNum(kw);
 
   return tokens.every(({ t, brand: tBrand, lat, layout }) => {
-    if (normName.includes(t) || normId.includes(t)) return true;
-    if (brand && brand.includes(t)) return true;
-    if (vendor && vendor.includes(t)) return true;
-    if (tBrand && (normName.includes(tBrand) || brand.includes(tBrand))) return true;
-    if (lat && (normName.includes(lat) || latName.includes(lat))) return true;
-    if (layout && normName.includes(layout)) return true;
+    const cleanT = stripNonAlphaNum(t);
+    if (!cleanT) return true; // Empty tokens like lonely symbols match everything
+    
+    if (normName.includes(t) || normId.includes(t) || cleanName.includes(cleanT) || cleanId.includes(cleanT)) return true;
+    if (brand && (brand.includes(t) || cleanBrand.includes(cleanT))) return true;
+    if (vendor && (vendor.includes(t) || cleanVendor.includes(cleanT))) return true;
+    if (kw && (kw.includes(t) || cleanKw.includes(cleanT))) return true;
+    if (tBrand) {
+      const cleanTBrand = stripNonAlphaNum(tBrand);
+      if (normName.includes(tBrand) || brand.includes(tBrand) || cleanName.includes(cleanTBrand) || cleanBrand.includes(cleanTBrand)) return true;
+    }
+    if (lat && (normName.includes(lat) || latName.includes(lat) || cleanName.includes(cleanT) || cleanLatName.includes(cleanT))) return true;
+    if (layout && (normName.includes(layout) || cleanName.includes(cleanT))) return true;
     return false;
   });
 }
