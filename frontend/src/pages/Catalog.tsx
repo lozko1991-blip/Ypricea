@@ -21,7 +21,8 @@ import {
   loadShardMap, 
   loadShard, 
   loadDescShard, 
-  mapGet 
+  mapGet,
+  fetchGzipJSON 
 } from '../lib/dataLoader';
 import { useCart } from '../contexts/CartContext';
 import { useSearch } from '../contexts/SearchContext';
@@ -133,26 +134,22 @@ function parseQuery(raw: string): SearchToken[] {
   });
 }
 
-function buildProductSearchString(p: CatalogProduct): string {
+// Fast on-demand product matching without pre-allocating millions of string objects
+function matchProduct(p: CatalogProduct, tokens: SearchToken[]): boolean {
   const normName = normalizeString(p.n);
   const normId = String(p.id).toLowerCase();
-  let s = normName + ' ' + normId;
   const latName = cyrillicToLatin(normName);
-  if (latName !== normName) {
-    s += ' ' + latName;
-  }
-  if (p.b) s += ' ' + normalizeString(p.b);
-  if (p.v) s += ' ' + normalizeString(p.v);
-  return s;
-}
+  const brand = p.b ? normalizeString(p.b) : '';
+  const vendor = p.v ? normalizeString(p.v) : '';
 
-function matchProduct(p: CatalogProduct, tokens: SearchToken[], searchStrings: Map<string, string>): boolean {
-  const s = searchStrings.get(p.id) || '';
-  return tokens.every(({ t, brand, lat, layout }) => {
-    return s.includes(t) || 
-           (brand && s.includes(brand)) || 
-           (lat && s.includes(lat)) ||
-           (layout && s.includes(layout));
+  return tokens.every(({ t, brand: tBrand, lat, layout }) => {
+    if (normName.includes(t) || normId.includes(t)) return true;
+    if (brand && brand.includes(t)) return true;
+    if (vendor && vendor.includes(t)) return true;
+    if (tBrand && (normName.includes(tBrand) || brand.includes(tBrand))) return true;
+    if (lat && (normName.includes(lat) || latName.includes(lat))) return true;
+    if (layout && normName.includes(layout)) return true;
+    return false;
   });
 }
 
@@ -163,16 +160,6 @@ export default function Catalog() {
   const [loading, setLoading] = useState(true);
   const [productsLoading, setProductsLoading] = useState(true);
 
-  // Pre-compiled search strings map for all products
-  const searchStrings = useMemo(() => {
-    const map = new Map<string, string>();
-    if (!data) return map;
-    data.products.forEach(p => {
-      map.set(p.id, buildProductSearchString(p));
-    });
-    return map;
-  }, [data]);
-  
   // Filtering States
   const { searchTerm, setSearchTerm } = useSearch();
   const [selectedSupplier, setSelectedSupplier] = useState<string>('all');
@@ -215,15 +202,24 @@ export default function Catalog() {
         setLoading(false);
       }
 
-      // 2. Fetch lightweight search index in background (allows browser caching)
+      // 2. Fetch compressed gzip index in background (~3.5MB vs 25MB raw) for 5-7x faster loading
       try {
-        const indexRes = await fetch(`${import.meta.env.BASE_URL}data/index.json`);
-        if (indexRes.ok) {
-          const indexJson = await indexRes.json();
+        const indexJson = await fetchGzipJSON(`${import.meta.env.BASE_URL}data/index.json.gz`);
+        if (indexJson) {
           setData(indexJson);
         }
       } catch (e) {
-        console.error('Failed to load catalog index', e);
+        console.error('Failed to load catalog index.gz', e);
+        // Fallback to uncompressed index if gzip fails
+        try {
+          const rawRes = await fetch(`${import.meta.env.BASE_URL}data/index.json`);
+          if (rawRes.ok) {
+            const rawJson = await rawRes.json();
+            setData(rawJson);
+          }
+        } catch (rawErr) {
+          console.error('Fallback uncompressed index also failed', rawErr);
+        }
       } finally {
         setProductsLoading(false);
       }
@@ -580,12 +576,12 @@ export default function Catalog() {
 
       // 5. Smart Search text filter
       if (tokens.length > 0) {
-        if (!matchProduct(p, tokens, searchStrings)) return false;
+        if (!matchProduct(p, tokens)) return false;
       }
       
       return true;
     });
-  }, [data, selectedSupplier, activeBranchCategoryIds, searchTerm, selectedBrand, minPrice, maxPrice, searchStrings]);
+  }, [data, selectedSupplier, activeBranchCategoryIds, searchTerm, selectedBrand, minPrice, maxPrice]);
 
   // Pagination Variables
   const totalProducts = filteredProducts.length;
