@@ -35,7 +35,6 @@ export const YAVSHOKE_SUB_SUPPLIERS: SupplierInfo[] = [
 ];
 
 export const MASTEREVA_SUPPLIERS: SupplierInfo[] = [
-  ...YAVSHOKE_SUB_SUPPLIERS,
   { key: 'ev_dropt',      label: 'Dropt',      short: 'DO', color: '#84cc16', bg: '#f7fee7', text: '#3f6212' },
   { key: 'ev_forus',      label: 'Forus',      short: 'FO', color: '#14b8a6', bg: '#f0fdfa', text: '#134e4a' },
   { key: 'ev_shkatulka',  label: 'Shkatulka',  short: 'SH', color: '#f59e0b', bg: '#fef3c7', text: '#b45309' },
@@ -61,6 +60,10 @@ const BY_KEY: Record<string, SupplierInfo> = {
 };
 
 MASTEREVA_SUPPLIERS.forEach(s => {
+  BY_KEY[s.key] = s;
+});
+
+YAVSHOKE_SUB_SUPPLIERS.forEach(s => {
   BY_KEY[s.key] = s;
 });
 

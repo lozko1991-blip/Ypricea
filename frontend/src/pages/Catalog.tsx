@@ -15,7 +15,8 @@ import {
   getSupplierInfo, 
   YAVSHOKE, 
   MASTEREVA_DEFAULT, 
-  MASTEREVA_SUPPLIERS 
+  MASTEREVA_SUPPLIERS,
+  YAVSHOKE_SUB_SUPPLIERS
 } from '../lib/suppliers';
 import { 
   loadShardMap, 
@@ -442,6 +443,7 @@ export default function Catalog() {
   const activeSuppliers = useMemo(() => {
     const allSuppliers = [
       YAVSHOKE,
+      ...YAVSHOKE_SUB_SUPPLIERS,
       ...MASTEREVA_SUPPLIERS,
       MASTEREVA_DEFAULT
     ];
@@ -933,7 +935,36 @@ export default function Catalog() {
           {/* Sub-suppliers list (Nested under Yavshoke group) */}
           <div className="ml-3 pl-2 border-l border-[var(--border)] flex flex-col gap-1 my-1">
             <span className="text-[9px] font-extrabold text-[var(--text2)] uppercase tracking-wider px-1 mb-0.5">Під-склади Явшоке:</span>
-            {activeSuppliers.filter(s => s.key !== 'all' && s.key !== 'yavshoke').map(s => {
+            {activeSuppliers.filter(s => s.key.startsWith('ys_')).map(s => {
+              const isActive = selectedSupplier === s.key;
+              const count = supplierCounts[s.key] || 0;
+              return (
+                <button
+                  key={s.key}
+                  onClick={() => handleSelectSupplier(s.key)}
+                  className={`flex items-center justify-start gap-2 text-[11px] py-1 px-2 rounded-lg transition-all font-semibold w-full ${
+                    isActive ? 'text-white font-black' : 'text-[var(--text2)] hover:bg-[var(--surface2)]'
+                  }`}
+                  style={{
+                    backgroundColor: isActive ? s.color : undefined
+                  }}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: isActive ? '#fff' : s.color }} />
+                  <span className="truncate text-left flex-1">{s.label}</span>
+                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md shrink-0 ${
+                    isActive ? 'bg-white/20 text-white' : 'bg-[var(--surface2)] text-[var(--text2)]'
+                  }`}>
+                    {count.toLocaleString('uk-UA')}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          
+          {/* External / Other Suppliers */}
+          <div className="mt-2 flex flex-col gap-1">
+            <span className="text-[9px] font-extrabold text-[var(--text2)] uppercase tracking-wider px-1 mb-0.5 mt-2">Інші склади:</span>
+            {activeSuppliers.filter(s => s.key !== 'all' && s.key !== 'yavshoke' && !s.key.startsWith('ys_')).map(s => {
               const isActive = selectedSupplier === s.key;
               const count = supplierCounts[s.key] || 0;
               return (
@@ -1507,23 +1538,43 @@ export default function Catalog() {
                   
                   {/* Action Buttons */}
                   <div className="flex flex-col gap-2 w-full sm:w-auto">
-                    <button 
-                      onClick={() => {
-                        // Find Analog Logic
-                        setSelectedProduct(null);
-                        setSearchTerm('');
-                        setMinPrice(Math.max(0, Math.floor(selectedProduct.pr * 0.85)).toString());
-                        setMaxPrice(Math.ceil(selectedProduct.pr * 1.15).toString());
-                        setInStockOnly(true);
-                        setSelectedSupplier(selectedProduct.s || 'yavshoke');
-                        handleSelectCategory(selectedProduct.c);
-                        setCurrentPage(1);
-                      }}
-                      className="gbtn bg-[var(--accent)] text-white shadow-sm border border-[var(--accent)] hover:opacity-90 w-full sm:w-auto whitespace-nowrap justify-center"
-                    >
-                      <Search size={16} />
-                      Шукати аналог
-                    </button>
+                    <div className="flex gap-2 w-full">
+                      <button 
+                        onClick={() => {
+                          setSelectedProduct(null);
+                          setSearchTerm('');
+                          setMinPrice(Math.max(0, Math.floor(selectedProduct.pr * 0.85)).toString());
+                          setMaxPrice(Math.ceil(selectedProduct.pr * 1.15).toString());
+                          setInStockOnly(true);
+                          setSelectedSupplier(selectedProduct.s || 'yavshoke');
+                          handleSelectCategory(selectedProduct.c);
+                          setCurrentPage(1);
+                        }}
+                        className="gbtn bg-[var(--accent)] text-white shadow-sm border border-[var(--accent)] hover:opacity-90 flex-1 whitespace-nowrap justify-center text-[11px]"
+                        title="Шукати тільки на цьому складі (для відправки однією посилкою)"
+                      >
+                        <Search size={14} />
+                        Аналог (цей склад)
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setSelectedProduct(null);
+                          setSearchTerm('');
+                          setMinPrice(Math.max(0, Math.floor(selectedProduct.pr * 0.85)).toString());
+                          setMaxPrice(Math.ceil(selectedProduct.pr * 1.15).toString());
+                          setInStockOnly(true);
+                          const isYavshoke = !selectedProduct.s || selectedProduct.s === 'yavshoke' || selectedProduct.s.startsWith('ys_');
+                          setSelectedSupplier(isYavshoke ? 'yavshoke' : 'all');
+                          handleSelectCategory(selectedProduct.c);
+                          setCurrentPage(1);
+                        }}
+                        className="gbtn bg-[var(--surface)] text-[var(--text)] shadow-sm border border-[var(--border)] hover:bg-[var(--surface2)] flex-1 whitespace-nowrap justify-center text-[11px]"
+                        title="Шукати по всім доступним складам"
+                      >
+                        <Search size={14} />
+                        {(!selectedProduct.s || selectedProduct.s === 'yavshoke' || selectedProduct.s.startsWith('ys_')) ? 'Аналог (всі Явшоке)' : 'Аналог (всі бази)'}
+                      </button>
+                    </div>
                     {selectedProduct.a === 0 && (
                       <span className="text-[10px] text-[var(--text2)] text-center font-semibold">
                         (В межах ±15% від ціни)
