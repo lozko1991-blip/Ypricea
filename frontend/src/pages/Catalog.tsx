@@ -47,6 +47,7 @@ interface Category {
   count?: number;
   total?: number;
   src?: string;
+  avg?: number;
 }
 
 interface IndexData {
@@ -94,7 +95,9 @@ const BRAND_MAP: Record<string, string> = {
 };
 
 interface SearchToken {
+  type: 'normal' | 'require' | 'exclude' | 'price_gt' | 'price_lt';
   t: string;
+  numValue?: number;
   brand: string | null;
   lat: string | null;
   layout: string | null;
@@ -123,14 +126,37 @@ function parseQuery(raw: string): SearchToken[] {
     }
   }
   return q.split(/\s+/).filter(Boolean).map(t => {
-    const brand = BRAND_MAP[t] || null;
-    const lat = cyrillicToLatin(t);
-    const layout = translateLayout(t);
+    let type: SearchToken['type'] = 'normal';
+    let numValue: number | undefined;
+    let text = t;
+
+    if (t.startsWith('>')) {
+      type = 'price_gt';
+      numValue = parseFloat(t.substring(1));
+      text = '';
+    } else if (t.startsWith('<')) {
+      type = 'price_lt';
+      numValue = parseFloat(t.substring(1));
+      text = '';
+    } else if (t.startsWith('+')) {
+      type = 'require';
+      text = t.substring(1);
+    } else if (t.startsWith('-')) {
+      type = 'exclude';
+      text = t.substring(1);
+    }
+
+    const brand = text ? (BRAND_MAP[text] || null) : null;
+    const lat = text ? cyrillicToLatin(text) : null;
+    const layout = text ? translateLayout(text) : null;
+    
     return { 
-      t, 
+      type,
+      t: text, 
+      numValue,
       brand, 
-      lat: lat !== t ? lat : null,
-      layout: layout !== t ? layout : null
+      lat: lat !== text ? lat : null,
+      layout: layout !== text ? layout : null
     };
   });
 }
@@ -154,21 +180,40 @@ function matchProduct(p: CatalogProduct, tokens: SearchToken[]): boolean {
   const kw = p.k || '';
   const cleanKw = stripNonAlphaNum(kw);
 
-  return tokens.every(({ t, brand: tBrand, lat, layout }) => {
+  return tokens.every(({ type, t, numValue, brand: tBrand, lat, layout }) => {
+    if (type === 'price_gt') {
+      return numValue !== undefined && !isNaN(numValue) && p.pr > numValue;
+    }
+    if (type === 'price_lt') {
+      return numValue !== undefined && !isNaN(numValue) && p.pr < numValue;
+    }
+
     const cleanT = stripNonAlphaNum(t);
     if (!cleanT) return true; // Empty tokens like lonely symbols match everything
     
-    if (normName.includes(t) || normId.includes(t) || cleanName.includes(cleanT) || cleanId.includes(cleanT)) return true;
-    if (brand && (brand.includes(t) || cleanBrand.includes(cleanT))) return true;
-    if (vendor && (vendor.includes(t) || cleanVendor.includes(cleanT))) return true;
-    if (kw && (kw.includes(t) || cleanKw.includes(cleanT))) return true;
-    if (tBrand) {
-      const cleanTBrand = stripNonAlphaNum(tBrand);
-      if (normName.includes(tBrand) || brand.includes(tBrand) || cleanName.includes(cleanTBrand) || cleanBrand.includes(cleanTBrand)) return true;
-    }
-    if (lat && (normName.includes(lat) || latName.includes(lat) || cleanName.includes(cleanT) || cleanLatName.includes(cleanT))) return true;
-    if (layout && (normName.includes(layout) || cleanName.includes(cleanT))) return true;
-    return false;
+    const matches = () => {
+      if (normName.includes(t) || normId.includes(t) || cleanName.includes(cleanT) || cleanId.includes(cleanT)) return true;
+      if (brand && (brand.includes(t) || cleanBrand.includes(cleanT))) return true;
+      if (vendor && (vendor.includes(t) || cleanVendor.includes(cleanT))) return true;
+      if (kw && (kw.includes(t) || cleanKw.includes(cleanT))) return true;
+      if (tBrand) {
+        const cleanTBrand = stripNonAlphaNum(tBrand);
+        if (normName.includes(tBrand) || brand.includes(tBrand) || cleanName.includes(cleanTBrand) || cleanBrand.includes(cleanTBrand)) return true;
+      }
+      if (lat) {
+        const cleanLat = stripNonAlphaNum(lat);
+        if (latName.includes(lat) || cleanLatName.includes(cleanLat)) return true;
+      }
+      if (layout) {
+        const cleanLayout = stripNonAlphaNum(layout);
+        if (normName.includes(layout) || cleanName.includes(cleanLayout)) return true;
+      }
+      return false;
+    };
+
+    const isMatch = matches();
+    if (type === 'exclude') return !isMatch;
+    return isMatch;
   });
 }
 
@@ -204,6 +249,8 @@ export default function Catalog() {
   const [selectedBrand, setSelectedBrand] = useState<string>('all');
   const [minPrice, setMinPrice] = useState<string>('');
   const [maxPrice, setMaxPrice] = useState<string>('');
+  const [inStockOnly, setInStockOnly] = useState<boolean>(false);
+  const [pinnedProducts, setPinnedProducts] = useState<CatalogProduct[]>([]);
 
   // Fetch initial lightweight index and categories
   useEffect(() => {
@@ -498,11 +545,47 @@ export default function Catalog() {
       .map(([name, count]) => ({ name, count }));
   }, [data]);
 
+  // Precompute category maps for performance
+  const categoryMaps = useMemo(() => {
+    const map = new Map<string, Category>();
+    const parentMap = new Map<string, Set<string>>();
+    
+    categories.forEach(c => {
+      const cid = String(c.id);
+      map.set(cid, c);
+      
+      const pid = c.parentId ? String(c.parentId) : '';
+      if (pid) {
+        if (!parentMap.has(pid)) parentMap.set(pid, new Set());
+        parentMap.get(pid)!.add(cid);
+      }
+    });
+    
+    return { map, parentMap };
+  }, [categories]);
+
+  // Fast getAncestors using precomputed map
+  const getAncestorsFast = (id: string, map: Map<string, Category>): Category[] => {
+    const ancestors: Category[] = [];
+    let curr = map.get(id);
+    while (curr && curr.parentId) {
+      const parent = map.get(String(curr.parentId));
+      if (parent && !ancestors.find(a => a.id === parent.id)) {
+        ancestors.push(parent);
+        curr = parent;
+      } else {
+        break;
+      }
+    }
+    return ancestors;
+  };
+
   // Collect category search matches (by category name or containing brand name)
   const searchMatchingCategoryIds = useMemo(() => {
     if (!categorySearchTerm.trim()) return null;
     const matched = new Set<string>();
     const term = categorySearchTerm.toLowerCase();
+    const { map } = categoryMaps;
     
     categories.forEach(c => {
       let matches = c.name.toLowerCase().includes(term);
@@ -519,35 +602,39 @@ export default function Catalog() {
       if (matches) {
         const cid = String(c.id);
         matched.add(cid);
-        getAncestors(cid, categories).forEach(a => matched.add(String(a.id)));
+        getAncestorsFast(cid, map).forEach(a => matched.add(String(a.id)));
       }
     });
     return matched;
-  }, [categories, categorySearchTerm, categoriesByBrand]);
+  }, [categories, categorySearchTerm, categoriesByBrand, categoryMaps]);
 
-  // Get active category branch IDs
+  // Get active category branch IDs using precomputed tree
   const activeBranchCategoryIds = useMemo(() => {
     if (selectedCategory === 'all') return null;
     const ids = new Set<string>();
+    const { parentMap } = categoryMaps;
     
     const collect = (id: string) => {
       ids.add(id);
-      categories.forEach(c => {
-        if (String(c.parentId) === id && !ids.has(String(c.id))) {
-          collect(String(c.id));
-        }
-      });
+      const children = parentMap.get(id);
+      if (children) {
+        children.forEach(childId => {
+          if (!ids.has(childId)) collect(childId);
+        });
+      }
     };
     
     collect(selectedCategory);
     return ids;
-  }, [categories, selectedCategory]);
+  }, [selectedCategory, categoryMaps]);
 
   // Category Tree Search handler
   const handleCategorySearchChange = (q: string) => {
     setCategorySearchTerm(q);
     if (!q.trim()) return;
     const term = q.toLowerCase();
+    const { map } = categoryMaps;
+    
     setExpandedCategories(prev => {
       const next = new Set(prev);
       categories.forEach(c => {
@@ -561,7 +648,7 @@ export default function Catalog() {
           }
         }
         if (matches) {
-          getAncestors(String(c.id), categories).forEach(a => next.add(String(a.id)));
+          getAncestorsFast(String(c.id), map).forEach(a => next.add(String(a.id)));
         }
       });
       return next;
@@ -575,7 +662,17 @@ export default function Catalog() {
 
     return data.products.filter(p => {
       // 1. Supplier filter
-      if (selectedSupplier !== 'all' && p.s !== selectedSupplier) return false;
+      if (selectedSupplier !== 'all') {
+        if (selectedSupplier === 'yavshoke') {
+          // If 'yavshoke' is selected, show all Yavshoke sub-suppliers plus direct yavshoke
+          if (p.s !== 'yavshoke' && !p.s.startsWith('ys_')) return false;
+        } else if (p.s !== selectedSupplier) {
+          return false;
+        }
+      }
+      
+      // 1.5. In Stock filter
+      if (inStockOnly && p.a !== 1) return false;
       
       // 2. Category filter
       if (activeBranchCategoryIds && !activeBranchCategoryIds.has(p.c)) return false;
@@ -600,7 +697,7 @@ export default function Catalog() {
       
       return true;
     });
-  }, [data, selectedSupplier, activeBranchCategoryIds, searchTerm, selectedBrand, minPrice, maxPrice]);
+  }, [data, selectedSupplier, activeBranchCategoryIds, searchTerm, selectedBrand, minPrice, maxPrice, inStockOnly]);
 
   // Pagination Variables
   const totalProducts = filteredProducts.length;
@@ -815,30 +912,52 @@ export default function Catalog() {
             </span>
           </button>
           
-          {activeSuppliers.map(s => {
-            const isActive = selectedSupplier === s.key;
-            const count = supplierCounts[s.key] || 0;
-            return (
-              <button
-                key={s.key}
-                onClick={() => handleSelectSupplier(s.key)}
-                className={`flex items-center justify-start gap-2 text-xs py-1.5 px-2 rounded-xl transition-all font-bold w-full ${
-                  isActive ? 'text-white font-black' : 'text-[var(--text2)] hover:bg-[var(--surface2)]'
-                }`}
-                style={{
-                  backgroundColor: isActive ? s.color : undefined
-                }}
-              >
-                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: isActive ? '#fff' : s.color }} />
-                <span className="truncate text-left">{s.label}</span>
-                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md shrink-0 ${
-                  isActive ? 'bg-white/20 text-white' : 'bg-[var(--surface2)] text-[var(--text2)]'
-                }`}>
-                  {count.toLocaleString('uk-UA')}
-                </span>
-              </button>
-            );
-          })}
+          {/* Primary Top Level Suppliers */}
+          <button
+            onClick={() => handleSelectSupplier('yavshoke')}
+            className={`flex items-center justify-start gap-2 text-xs py-1.5 px-2 rounded-xl transition-all font-bold w-full ${
+              selectedSupplier === 'yavshoke'
+                ? 'bg-sky-600 text-white font-black'
+                : 'text-[var(--text2)] hover:bg-[var(--surface2)]'
+            }`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-sky-400" />
+            <span className="truncate text-left flex-1">ЯВШОКЕ (Всі під-склади)</span>
+            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md shrink-0 ${
+              selectedSupplier === 'yavshoke' ? 'bg-white/20 text-white' : 'bg-[var(--surface2)] text-[var(--text2)]'
+            }`}>
+              {(supplierCounts['yavshoke'] || 0).toLocaleString('uk-UA')}
+            </span>
+          </button>
+
+          {/* Sub-suppliers list (Nested under Yavshoke group) */}
+          <div className="ml-3 pl-2 border-l border-[var(--border)] flex flex-col gap-1 my-1">
+            <span className="text-[9px] font-extrabold text-[var(--text2)] uppercase tracking-wider px-1 mb-0.5">Під-склади Явшоке:</span>
+            {activeSuppliers.filter(s => s.key !== 'all' && s.key !== 'yavshoke').map(s => {
+              const isActive = selectedSupplier === s.key;
+              const count = supplierCounts[s.key] || 0;
+              return (
+                <button
+                  key={s.key}
+                  onClick={() => handleSelectSupplier(s.key)}
+                  className={`flex items-center justify-start gap-2 text-[11px] py-1 px-2 rounded-lg transition-all font-semibold w-full ${
+                    isActive ? 'text-white font-black' : 'text-[var(--text2)] hover:bg-[var(--surface2)]'
+                  }`}
+                  style={{
+                    backgroundColor: isActive ? s.color : undefined
+                  }}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: isActive ? '#fff' : s.color }} />
+                  <span className="truncate text-left flex-1">{s.label}</span>
+                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md shrink-0 ${
+                    isActive ? 'bg-white/20 text-white' : 'bg-[var(--surface2)] text-[var(--text2)]'
+                  }`}>
+                    {count.toLocaleString('uk-UA')}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     );
@@ -999,13 +1118,72 @@ export default function Catalog() {
                     type="button"
                     title="Очистити пошук"
                   >
-                    <X size={16} />
+                    <X size={14} />
                   </button>
                 )}
               </div>
             </div>
           </div>
 
+          {/* Advanced Filters: Brand and Price Range */}
+          <div className="flex flex-col sm:flex-row gap-3 mb-2 bg-[var(--surface2)] p-3 rounded-2xl border border-[var(--border)] shadow-sm">
+            <div className="flex-1 relative">
+              <select
+                className="w-full bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] text-sm rounded-xl pl-10 pr-4 py-2 outline-none focus:border-[var(--accent)] transition-all appearance-none cursor-pointer font-bold h-[38px]"
+                value={selectedBrand}
+                onChange={e => {
+                  setSelectedBrand(e.target.value);
+                  setCurrentPage(1);
+                }}
+              >
+                <option value="all">Усі бренди</option>
+                {availableBrands.map(b => (
+                  <option key={b.name} value={b.name}>{b.name} ({b.count})</option>
+                ))}
+              </select>
+              <Filter size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text2)] pointer-events-none" />
+              <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[var(--text2)] pointer-events-none opacity-50" />
+            </div>
+            
+            <div className="flex items-center gap-2 flex-1 sm:flex-none">
+              <div className="relative flex-1 sm:w-28">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text2)] text-xs font-bold">Від</span>
+                <input 
+                  type="number"
+                  placeholder="0"
+                  className="w-full h-[38px] bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] text-sm rounded-xl pl-10 pr-3 py-2 outline-none focus:border-[var(--accent)] transition-all font-bold placeholder:text-[var(--text2)]"
+                  value={minPrice}
+                  onChange={e => { setMinPrice(e.target.value); setCurrentPage(1); }}
+                />
+              </div>
+              <span className="text-[var(--text2)]">-</span>
+              <div className="relative flex-1 sm:w-28">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text2)] text-xs font-bold">До</span>
+                <input 
+                  type="number"
+                  placeholder="99999"
+                  className="w-full h-[38px] bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] text-sm rounded-xl pl-10 pr-3 py-2 outline-none focus:border-[var(--accent)] transition-all font-bold placeholder:text-[var(--text2)]"
+                  value={maxPrice}
+                  onChange={e => { setMaxPrice(e.target.value); setCurrentPage(1); }}
+                />
+              </div>
+
+              <div className="flex items-center gap-2 flex-none ml-2">
+                <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-[var(--text)] whitespace-nowrap">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 rounded border-[var(--border)] text-[var(--accent)] focus:ring-[var(--accent)]"
+                    checked={inStockOnly}
+                    onChange={(e) => {
+                      setInStockOnly(e.target.checked);
+                      setCurrentPage(1);
+                    }}
+                  />
+                  Тільки в наявності
+                </label>
+              </div>
+            </div>
+          </div>
           {productsLoading ? (
             <div className="card flex flex-col items-center justify-center py-24 text-[var(--text2)]">
               <Loader2 className="animate-spin mb-4" size={32} />
@@ -1054,6 +1232,25 @@ export default function Catalog() {
                             Немає
                           </div>
                         )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPinnedProducts(prev => {
+                              const isPinned = prev.some(pinned => pinned.id === p.id);
+                              if (isPinned) return prev.filter(pinned => pinned.id !== p.id);
+                              if (prev.length >= 3) return prev; // Max 3 items
+                              return [...prev, p];
+                            });
+                          }}
+                          className="absolute top-2.5 right-2.5 p-1.5 rounded-xl bg-white/80 backdrop-blur-sm shadow-sm hover:bg-white text-[var(--text2)] hover:text-[var(--accent)] transition-all z-10"
+                          title="Порівняти / Відкласти"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill={pinnedProducts.some(pinned => pinned.id === p.id) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                            <polyline points="3.29 7 12 12 20.71 7"></polyline>
+                            <line x1="12" y1="22" x2="12" y2="12"></line>
+                          </svg>
+                        </button>
                         <div className="absolute bottom-2.5 right-2.5 bg-black/60 text-white text-[9px] px-2 py-0.5 rounded-full font-black tracking-wide">
                           ID: {p.id}
                         </div>
@@ -1065,7 +1262,26 @@ export default function Catalog() {
                         <div className="mt-auto flex flex-wrap items-end justify-between gap-1 pt-1">
                           <div>
                             <span className="sec-title block mb-0.5">Опт ціна</span>
-                            <span className="font-black text-base text-[var(--text)]">{p.pr} ₴</span>
+                            {(() => {
+                              const avg = categoryMaps.map.get(p.c)?.avg;
+                              let colorClass = "text-[var(--text)]";
+                              let badge = null;
+                              if (avg && p.pr > 0) {
+                                if (p.pr <= avg * 0.85) {
+                                  colorClass = "text-emerald-500";
+                                  badge = <span className="ml-1 text-[8px] text-emerald-600 bg-emerald-50 px-1 py-0.5 rounded font-black tracking-tighter" title={`Середня ціна: ${avg} ₴`}>ВИГІДНО</span>;
+                                } else if (p.pr >= avg * 1.15) {
+                                  colorClass = "text-red-500";
+                                  badge = <span className="ml-1 text-[8px] text-red-600 bg-red-50 px-1 py-0.5 rounded font-black tracking-tighter" title={`Середня ціна: ${avg} ₴`}>ДОРОГО</span>;
+                                }
+                              }
+                              return (
+                                <div className="flex items-center">
+                                  <span className={`font-black text-base ${colorClass}`}>{p.pr} ₴</span>
+                                  {badge}
+                                </div>
+                              );
+                            })()}
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">
                             {(() => {
@@ -1274,17 +1490,45 @@ export default function Catalog() {
                   </span>
                 </div>
 
-                {/* Price layout */}
-                <div className="mb-4 bg-[var(--surface2)] border border-[var(--border)] rounded-2xl p-4 flex justify-between items-center">
-                  <div>
-                    <span className="sec-title block mb-0.5">Опт ціна</span>
-                    <span className="font-black text-2xl text-[var(--text)]">{selectedProduct.pr} ₴</span>
+                {/* Price layout & Actions */}
+                <div className="mb-4 bg-[var(--surface2)] border border-[var(--border)] rounded-2xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div className="flex justify-between w-full sm:w-auto sm:flex-col gap-1">
+                    <div>
+                      <span className="sec-title block mb-0.5">Опт ціна</span>
+                      <span className="font-black text-2xl text-[var(--text)]">{selectedProduct.pr} ₴</span>
+                    </div>
+                    <div className="text-right sm:text-left">
+                      <span className="sec-title block mb-0.5">Рекомендована</span>
+                      <span className="font-bold text-xs text-[var(--text2)]">
+                        {(Math.round(selectedProduct.pr * 1.25)).toLocaleString('uk-UA')} ₴ (+25%)
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className="sec-title block mb-0.5">Рекомендована</span>
-                    <span className="font-bold text-xs text-[var(--text2)]">
-                      {(Math.round(selectedProduct.pr * 1.25)).toLocaleString('uk-UA')} ₴ (+25%)
-                    </span>
+                  
+                  {/* Action Buttons */}
+                  <div className="flex flex-col gap-2 w-full sm:w-auto">
+                    <button 
+                      onClick={() => {
+                        // Find Analog Logic
+                        setSelectedProduct(null);
+                        setSearchTerm('');
+                        setMinPrice(Math.max(0, Math.floor(selectedProduct.pr * 0.85)).toString());
+                        setMaxPrice(Math.ceil(selectedProduct.pr * 1.15).toString());
+                        setInStockOnly(true);
+                        setSelectedSupplier(selectedProduct.s || 'yavshoke');
+                        handleSelectCategory(selectedProduct.c);
+                        setCurrentPage(1);
+                      }}
+                      className="gbtn bg-[var(--accent)] text-white shadow-sm border border-[var(--accent)] hover:opacity-90 w-full sm:w-auto whitespace-nowrap justify-center"
+                    >
+                      <Search size={16} />
+                      Шукати аналог
+                    </button>
+                    {selectedProduct.a === 0 && (
+                      <span className="text-[10px] text-[var(--text2)] text-center font-semibold">
+                        (В межах ±15% від ціни)
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -1403,6 +1647,59 @@ export default function Catalog() {
                 className="gbtn bg-[var(--text)] text-[var(--surface)] text-xs active:scale-95 transition-all"
               >
                 Закрити
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Floating Compare Panel */}
+      {pinnedProducts.length > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-full max-w-4xl px-4 z-40 animate-in slide-in-from-bottom-4">
+          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl shadow-2xl p-4 flex flex-col sm:flex-row gap-4 items-end sm:items-center">
+            <div className="flex-1 w-full overflow-x-auto pb-2 sm:pb-0 noscroll">
+              <div className="flex gap-4 min-w-max">
+                {pinnedProducts.map(p => (
+                  <div key={p.id} className="w-48 bg-[var(--surface2)] rounded-xl p-2 relative flex flex-col border border-[var(--border)]">
+                    <button 
+                      onClick={() => setPinnedProducts(prev => prev.filter(x => x.id !== p.id))}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 shadow-sm z-10"
+                    >
+                      <X size={12} />
+                    </button>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-10 h-10 bg-[var(--surface)] rounded-lg flex items-center justify-center shrink-0 overflow-hidden p-1">
+                        {p.i ? (
+                          <img src={p.i.startsWith('http') ? p.i : `${data?.imgPrefix || ''}${p.i}`} className="max-w-full max-h-full object-contain mix-blend-multiply" />
+                        ) : <PackageX size={16} className="opacity-20" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[10px] font-bold truncate" title={p.n}>{p.n}</div>
+                        <div className="text-[10px] text-[var(--text2)]">{getSupplierInfo(p.s).label}</div>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center mt-auto">
+                      <span className="font-black text-sm text-[var(--text)]">{p.pr} ₴</span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${p.a === 1 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                        {p.a === 1 ? 'В наявності' : 'Немає'}
+                      </span>
+                    </div>
+                    <button 
+                      onClick={() => addToCart(p)}
+                      disabled={p.a === 0}
+                      className="mt-2 w-full py-1 text-[10px] bg-[var(--accent)] text-white rounded-lg font-bold hover:opacity-90 disabled:opacity-50"
+                    >
+                      У кошик
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 shrink-0 w-full sm:w-auto">
+              <button 
+                onClick={() => setPinnedProducts([])}
+                className="text-xs font-bold text-[var(--text2)] hover:text-red-500 w-full text-center"
+              >
+                Очистити всі
               </button>
             </div>
           </div>

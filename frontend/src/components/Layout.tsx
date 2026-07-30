@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
@@ -41,6 +41,22 @@ export default function Layout() {
 
   const [isContactsOpen, setIsContactsOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        if (location.pathname !== '/catalog') {
+          navigate('/catalog');
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [location.pathname, navigate]);
 
   // Checkout Form States
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
@@ -116,9 +132,10 @@ export default function Layout() {
           <div className="order-3 w-full md:order-2 md:flex-1 md:max-w-md lg:max-w-lg xl:max-w-xl md:mx-4 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text2)]" size={16} />
             <input
+              ref={searchInputRef}
               type="text"
-              placeholder="Пошук товарів (розумний пошук)..."
-              className="input-field w-full pl-9 pr-9 py-2 text-sm"
+              placeholder="Шукати (Ctrl+K)... Оператори: >500, +bosch, -makita"
+              className="input-field w-full pl-9 pr-9 py-2 text-sm placeholder:text-[var(--text2)]"
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);

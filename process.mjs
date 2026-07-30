@@ -254,10 +254,56 @@ function parse() {
 }
 
 // ──────────── 2.5 Повний JSON (один файл) + фільтри ────────────
+function detectYavshokeSubSupplier(o) {
+  const idStr = String(o.id || '');
+  const idLen = idStr.length;
+  const vendor = (o.vendor || '').toLowerCase();
+  
+  // Check parameter names signature
+  const pNames = (o.params || []).map(p => (p.name || '').toLowerCase());
+  const hasParam = (name) => pNames.some(p => p.includes(name.toLowerCase()));
+
+  // 1. Rolets (Штори)
+  if (vendor.includes('rolets') || hasParam('рулонной шторы') || hasParam('намотка полотна')) {
+    return 'ys_rolets';
+  }
+  // 2. FlexDress (Трикотаж / Одяг)
+  if (vendor.includes('flexdress') || hasParam('кигуруми') || hasParam('размер по росту')) {
+    return 'ys_flexdress';
+  }
+  // 3. Sunnysky (Освітлення)
+  if (vendor.includes('sunnysky') || hasParam('каркаса') || hasParam('цоколя') || hasParam('мощность лампы')) {
+    return 'ys_sunnysky';
+  }
+  // 4. Посуд (Ardesto, Empire, EDENBERG, Maestro, Luigi Bormioli, Stenson, Olens)
+  if (
+    vendor.includes('ardesto') || vendor.includes('empire') || vendor.includes('edenberg') || 
+    vendor.includes('maestro') || vendor.includes('luigi bormioli') || vendor.includes('stenson') || 
+    vendor.includes('olens') || vendor.includes('пасха') || hasParam('мытья в посудомоечной машине')
+  ) {
+    return 'ys_dishes';
+  }
+  // 5. Текстиль & Постіль (Colorful Home, Love You, Viluta, ТЕП, Moda)
+  if (
+    vendor.includes('love you') || vendor.includes('viluta') || vendor.includes('теп') || 
+    vendor.includes('colorful home') || vendor.includes('moda') || hasParam('пододеяльник') || hasParam('наволочка')
+  ) {
+    return 'ys_textile';
+  }
+  // 6. Партнерські склади (9-значні та 10-значні ID)
+  if (idLen === 9 || idLen === 10) {
+    return 'ys_partner';
+  }
+
+  // Default fallback for Yavshoke items
+  return 'yavshoke';
+}
+
 function collectYavshokeProducts(offersByCat) {
   const out = [];
   for (const [, arr] of offersByCat) {
     for (const o of arr) {
+      const srcKey = detectYavshokeSubSupplier(o);
       out.push({
         id: o.id,
         available: o.available,
@@ -272,7 +318,7 @@ function collectYavshokeProducts(offersByCat) {
         params: o.params || [],
         desc: o.desc || '',
         desc_ua: o.desc_ua || '',
-        src: 'yavshoke',
+        src: srcKey,
       });
     }
   }
@@ -692,12 +738,60 @@ async function writeShardedCatalog({ meta, keptCats, directCount, totalCount, pr
   const yavProducts = collectYavshokeProducts(built.offersByCat);
   const yavCats = built.keptCats.map(c => ({ ...c, src: 'yavshoke' }));
   
-  const allProducts = yavProducts
+  let allProducts = yavProducts
     .concat(me ? me.products : [])
     .concat(ip2 ? ip2.products : [])
     .concat(ager ? ager.products : [])
     .concat(issa ? issa.products : [])
     .concat(draap ? draap.products : []);
+    
+  // --- STATE PERSISTENCE: Keep Out-of-Stock for 7 days ---
+  const STATE_FILE = path.join(DATA_DIR, 'inventory_state.json');
+  let inventoryState = {};
+  try {
+    if (fs.existsSync(STATE_FILE)) {
+      inventoryState = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+    }
+  } catch (e) {
+    console.error('⚠️ Помилка читання inventory_state.json:', e.message);
+  }
+
+  const now = Date.now();
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+  
+  // Create a map of current products
+  const currentProductsMap = new Map();
+  allProducts.forEach(p => {
+    currentProductsMap.set(p.id, true);
+    inventoryState[p.id] = { lastSeen: now, data: p };
+  });
+
+  // Check old products in state
+  let restoredCount = 0;
+  const newState = {};
+  
+  for (const [id, stateItem] of Object.entries(inventoryState)) {
+    if (currentProductsMap.has(id)) {
+      newState[id] = stateItem;
+    } else {
+      // Product is missing from current feed. Check if it's within 7 days.
+      if (now - stateItem.lastSeen <= SEVEN_DAYS_MS) {
+        // Keep it, but mark as out of stock
+        const restoredProduct = { ...stateItem.data, available: false, a: 0 };
+        allProducts.push(restoredProduct);
+        newState[id] = stateItem;
+        restoredCount++;
+      }
+    }
+  }
+
+  try {
+    fs.writeFileSync(STATE_FILE, JSON.stringify(newState));
+    console.log(`📦 Збережено inventory_state.json. Відновлено зниклих товарів (Out-of-Stock): ${restoredCount}`);
+  } catch (e) {
+    console.error('⚠️ Помилка збереження inventory_state.json:', e.message);
+  }
+  // --- END STATE PERSISTENCE ---
     
   const allCats = yavCats
     .concat(me ? me.keptCats : [])
@@ -723,6 +817,22 @@ async function writeShardedCatalog({ meta, keptCats, directCount, totalCount, pr
   if (draap) {
     draap.keptCats.forEach(c => { directCount[c.id] = c.count; totalCount[c.id] = c.total; });
   }
+
+  // Calculate average price for each category
+  const catPrices = {};
+  allProducts.forEach(p => {
+    if (p.a === 1 && p.pr > 0) {
+      if (!catPrices[p.c]) catPrices[p.c] = { sum: 0, count: 0 };
+      catPrices[p.c].sum += p.pr;
+      catPrices[p.c].count += 1;
+    }
+  });
+  
+  allCats.forEach(c => {
+    if (catPrices[c.id]) {
+      c.avg = Math.round(catPrices[c.id].sum / catPrices[c.id].count);
+    }
+  });
 
   const shardMeta = {
     ...built.meta,

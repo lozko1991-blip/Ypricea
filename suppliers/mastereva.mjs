@@ -25,17 +25,18 @@ export function masterevaOfferSrc(offerId, categoryId) {
   if (offId.startsWith('1100_')) return 'ev_forus';
   if (offId.startsWith('1111_')) return 'ev_shkatulka';
   if (offId.startsWith('2222_')) return 'ev_optdrop';
+  if (offId.startsWith('3000_')) return 'ev_dropshipping';
   if (offId.startsWith('3333_')) return 'ev_lugi';
   if (offId.startsWith('4444_')) return 'ev_dropom';
   if (offId.startsWith('7777_')) return 'ev_posudograd';
   if (offId.startsWith('8888_')) return 'ev_iposud';
   if (offId.startsWith('9999_')) return 'ev_websklad';
   if (offId.startsWith('1200_')) return 'ev_aveopt';
-  if (offId.startsWith('1300_')) return 'ev_phantom';
+  if (offId.startsWith('1300_')) return 'ev_sonechko';
   
   if (catId.startsWith('5555') && catId.length > 4) return 'ev_royaltoys';
   
-  return 'ev_kievopt';
+  return 'ev_new';
 }
 
 async function masterevaDownload() {
