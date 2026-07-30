@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { 
   Search, 
   Loader2, 
@@ -231,6 +231,21 @@ export default function Catalog() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [categorySearchTerm, setCategorySearchTerm] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [brandSearchTerm, setBrandSearchTerm] = useState('');
+  const [isBrandDropdownOpen, setIsBrandDropdownOpen] = useState(false);
+  const brandDropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (brandDropdownRef.current && !brandDropdownRef.current.contains(e.target as Node)) {
+        setIsBrandDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -385,7 +400,41 @@ export default function Catalog() {
     setCurrentPage(1);
   };
 
-  const handleSelectCategory = (id: string) => {
+  // Extract keywords for analog search
+  const extractKeywords = (name: string) => {
+    // Remove punctuation, numbers, short words
+    const words = name.replace(/[^\w\sА-Яа-яІіЇїЄєҐґ]/gi, ' ')
+                      .split(/\s+/)
+                      .filter(w => w.length > 2 && isNaN(Number(w)));
+    return words.slice(0, 3).join(' ');
+  };
+
+  const handleAnalogSearch = (globalSearch: boolean) => {
+    if (!selectedProduct) return;
+    
+    // Instead of clearing search, extract keywords
+    const keywords = extractKeywords(selectedProduct.n);
+    setSearchTerm(keywords);
+    
+    // Set price range ±15% (min ±50 UAH)
+    const price = selectedProduct.pr;
+    const diff = Math.max(50, Math.floor(price * 0.15));
+    setMinPrice(Math.max(0, price - diff).toString());
+    setMaxPrice((price + diff).toString());
+    
+    setInStockOnly(true);
+    const isYavshoke = !selectedProduct.s || selectedProduct.s === 'yavshoke' || selectedProduct.s.startsWith('ys_');
+    setSelectedSupplier(globalSearch ? (isYavshoke ? 'yavshoke' : 'all') : (selectedProduct.s || 'yavshoke'));
+    handleSelectCategory(selectedProduct.c);
+    setSelectedProduct(null);
+    setCurrentPage(1);
+    
+    // Show filters automatically so the user sees the applied price/search
+    setShowFilters(true);
+  };
+
+  // Memoized handlers
+  const handleSelectCategory = useCallback((id: string) => {
     setSelectedCategory(id);
     setCurrentPage(1);
     setIsMobileSidebarOpen(false);
@@ -400,7 +449,7 @@ export default function Catalog() {
         return next;
       });
     }
-  };
+  }, [categories]);
 
   // Helper: Find parent categories
   const getAncestors = (id: string, list: Category[]): Category[] => {
@@ -1156,27 +1205,109 @@ export default function Catalog() {
             </div>
           </div>
 
+          </div>
+
+          {/* Filters Toggle Button */}
+          <div className="flex items-center justify-between mb-3 mt-4">
+            <button 
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-extrabold transition-all border ${
+                showFilters 
+                  ? 'bg-[var(--accent)] text-white border-[var(--accent)] shadow-sm' 
+                  : 'bg-[var(--surface2)] text-[var(--text2)] border-[var(--border)] hover:bg-[var(--border)] hover:text-[var(--text)]'
+              }`}
+            >
+              <Filter size={16} />
+              Фільтри
+              <ChevronDown size={14} className={`transition-transform duration-300 ${showFilters ? 'rotate-180' : ''}`} />
+            </button>
+
+            {/* Quick Actions (when filters are active) */}
+            {(selectedBrand !== 'all' || minPrice || maxPrice) && !showFilters && (
+               <div className="flex items-center gap-2 text-xs font-bold">
+                 <span className="w-2 h-2 rounded-full bg-[var(--accent)] animate-pulse" />
+                 <span className="text-[var(--accent)]">Активні фільтри</span>
+                 <button 
+                    onClick={() => {
+                      setSelectedBrand('all');
+                      setMinPrice('');
+                      setMaxPrice('');
+                      setCurrentPage(1);
+                    }}
+                    className="text-[var(--text2)] hover:text-red-500 underline ml-2"
+                 >
+                   Скинути
+                 </button>
+               </div>
+            )}
+          </div>
+
           {/* Advanced Filters: Brand and Price Range */}
-          <div className="flex flex-col sm:flex-row gap-3 mb-2 bg-[var(--surface2)] p-3 rounded-2xl border border-[var(--border)] shadow-sm">
-            <div className="flex-1 relative">
-              <select
-                className="w-full bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] text-sm rounded-xl pl-10 pr-4 py-2 outline-none focus:border-[var(--accent)] transition-all appearance-none cursor-pointer font-bold h-[38px]"
-                value={selectedBrand}
-                onChange={e => {
-                  setSelectedBrand(e.target.value);
-                  setCurrentPage(1);
-                }}
-              >
-                <option value="all">Усі бренди</option>
-                {availableBrands.map(b => (
-                  <option key={b.name} value={b.name}>{b.name} ({b.count})</option>
-                ))}
-              </select>
-              <Filter size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text2)] pointer-events-none" />
-              <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[var(--text2)] pointer-events-none opacity-50" />
-            </div>
-            
-            <div className="flex items-center gap-2 flex-1 sm:flex-none">
+          <div className={`overflow-hidden transition-all duration-300 ease-in-out ${showFilters ? 'max-h-[500px] opacity-100 mb-4' : 'max-h-0 opacity-0 mb-0'}`}>
+            <div className="flex flex-col sm:flex-row gap-3 bg-[var(--surface2)] p-3 rounded-2xl border border-[var(--border)] shadow-sm">
+              <div className="flex-1 relative" ref={brandDropdownRef}>
+                <div 
+                  className="w-full bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] text-sm rounded-xl pl-10 pr-4 py-2 outline-none focus-within:border-[var(--accent)] transition-all flex items-center justify-between cursor-pointer font-bold h-[38px]"
+                  onClick={() => setIsBrandDropdownOpen(!isBrandDropdownOpen)}
+                >
+                  <span className="truncate">
+                    {selectedBrand === 'all' ? 'Усі бренди' : selectedBrand}
+                  </span>
+                  <ChevronDown size={14} className="text-[var(--text2)] opacity-50" />
+                </div>
+                <Filter size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text2)] pointer-events-none" />
+                
+                {isBrandDropdownOpen && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-xl z-10 flex flex-col max-h-[300px] animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="p-2 border-b border-[var(--border)]">
+                      <div className="relative">
+                        <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text2)]" />
+                        <input
+                          type="text"
+                          placeholder="Пошук бренду..."
+                          className="w-full bg-[var(--surface2)] text-xs rounded-lg pl-8 pr-2 py-1.5 outline-none focus:ring-1 ring-[var(--accent)]"
+                          value={brandSearchTerm}
+                          onChange={e => setBrandSearchTerm(e.target.value)}
+                          onClick={e => e.stopPropagation()}
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+                    <div className="overflow-y-auto flex-1 noscroll p-1">
+                      <button
+                        className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg transition-colors ${selectedBrand === 'all' ? 'bg-[var(--accent)] text-white' : 'hover:bg-[var(--surface2)] text-[var(--text)]'}`}
+                        onClick={() => {
+                          setSelectedBrand('all');
+                          setIsBrandDropdownOpen(false);
+                          setCurrentPage(1);
+                        }}
+                      >
+                        Усі бренди
+                      </button>
+                      {availableBrands
+                        .filter(b => b.name.toLowerCase().includes(brandSearchTerm.toLowerCase()))
+                        .map(b => (
+                          <button
+                            key={b.name}
+                            className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg transition-colors flex justify-between items-center ${selectedBrand === b.name ? 'bg-[var(--accent)] text-white' : 'hover:bg-[var(--surface2)] text-[var(--text)]'}`}
+                            onClick={() => {
+                              setSelectedBrand(b.name);
+                              setIsBrandDropdownOpen(false);
+                              setCurrentPage(1);
+                            }}
+                          >
+                            <span className="truncate">{b.name}</span>
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded-md ${selectedBrand === b.name ? 'bg-white/20' : 'bg-[var(--border)]'}`}>
+                              {b.count}
+                            </span>
+                          </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex items-center gap-2 flex-1 sm:flex-none">
               <div className="relative flex-1 sm:w-28">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text2)] text-xs font-bold">Від</span>
                 <input 
@@ -1540,16 +1671,7 @@ export default function Catalog() {
                   <div className="flex flex-col gap-2 w-full sm:w-auto">
                     <div className="flex gap-2 w-full">
                       <button 
-                        onClick={() => {
-                          setSelectedProduct(null);
-                          setSearchTerm('');
-                          setMinPrice(Math.max(0, Math.floor(selectedProduct.pr * 0.85)).toString());
-                          setMaxPrice(Math.ceil(selectedProduct.pr * 1.15).toString());
-                          setInStockOnly(true);
-                          setSelectedSupplier(selectedProduct.s || 'yavshoke');
-                          handleSelectCategory(selectedProduct.c);
-                          setCurrentPage(1);
-                        }}
+                        onClick={() => handleAnalogSearch(false)}
                         className="gbtn bg-[var(--accent)] text-white shadow-sm border border-[var(--accent)] hover:opacity-90 flex-1 whitespace-nowrap justify-center text-[11px]"
                         title="Шукати тільки на цьому складі (для відправки однією посилкою)"
                       >
@@ -1557,17 +1679,7 @@ export default function Catalog() {
                         Аналог (цей склад)
                       </button>
                       <button 
-                        onClick={() => {
-                          setSelectedProduct(null);
-                          setSearchTerm('');
-                          setMinPrice(Math.max(0, Math.floor(selectedProduct.pr * 0.85)).toString());
-                          setMaxPrice(Math.ceil(selectedProduct.pr * 1.15).toString());
-                          setInStockOnly(true);
-                          const isYavshoke = !selectedProduct.s || selectedProduct.s === 'yavshoke' || selectedProduct.s.startsWith('ys_');
-                          setSelectedSupplier(isYavshoke ? 'yavshoke' : 'all');
-                          handleSelectCategory(selectedProduct.c);
-                          setCurrentPage(1);
-                        }}
+                        onClick={() => handleAnalogSearch(true)}
                         className="gbtn bg-[var(--surface)] text-[var(--text)] shadow-sm border border-[var(--border)] hover:bg-[var(--surface2)] flex-1 whitespace-nowrap justify-center text-[11px]"
                         title="Шукати по всім доступним складам"
                       >

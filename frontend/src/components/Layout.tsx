@@ -44,6 +44,22 @@ export default function Layout() {
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  // Local state for debounced search
+  const [localSearch, setLocalSearch] = useState(searchTerm);
+  
+  useEffect(() => {
+    setLocalSearch(searchTerm);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (localSearch !== searchTerm) {
+        setSearchTerm(localSearch);
+      }
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [localSearch, searchTerm, setSearchTerm]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -136,17 +152,20 @@ export default function Layout() {
               type="text"
               placeholder="Шукати (Ctrl+K)... Оператори: >500, +bosch, -makita"
               className="input-field w-full pl-9 pr-9 py-2 text-sm placeholder:text-[var(--text2)]"
-              value={searchTerm}
+              value={localSearch}
               onChange={(e) => {
-                setSearchTerm(e.target.value);
+                setLocalSearch(e.target.value);
                 if (location.pathname !== '/catalog') {
                   navigate('/catalog');
                 }
               }}
             />
-            {searchTerm && (
+            {localSearch && (
               <button
-                onClick={() => setSearchTerm('')}
+                onClick={() => {
+                  setLocalSearch('');
+                  setSearchTerm('');
+                }}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text2)] hover:text-[var(--text)]"
                 type="button"
                 title="Очистити пошук"
