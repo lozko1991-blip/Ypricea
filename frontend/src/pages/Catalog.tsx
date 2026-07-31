@@ -1206,8 +1206,6 @@ export default function Catalog() {
             </div>
           </div>
 
-          </div>
-
           {/* Filters Toggle Button */}
           <div className="flex items-center justify-between mb-3 mt-4">
             <button 
@@ -1346,6 +1344,7 @@ export default function Catalog() {
                 </label>
               </div>
             </div>
+          </div>
           </div>
           {productsLoading ? (
             <div className="card flex flex-col items-center justify-center py-24 text-[var(--text2)]">
