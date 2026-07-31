@@ -10,7 +10,7 @@ let shardMapPending: Promise<Record<string, number>> | null = null;
 const BASE_URL = (import.meta.env.BASE_URL === './' || import.meta.env.BASE_URL === '.') ? '' : (import.meta.env.BASE_URL || '/');
 
 export async function fetchGzipJSON(url: string): Promise<any> {
-  const r = await fetch(url, { cache: 'force-cache' });
+  const r = await fetch(url, { cache: 'no-cache' });
   if (!r.ok) throw new Error('HTTP ' + r.status);
   
   const ct = r.headers.get('content-type') || '';

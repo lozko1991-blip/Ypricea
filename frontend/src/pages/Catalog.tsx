@@ -714,10 +714,11 @@ export default function Catalog() {
     return data.products.filter(p => {
       // 1. Supplier filter
       if (selectedSupplier !== 'all') {
+        const s = p.s || 'yavshoke';
         if (selectedSupplier === 'yavshoke') {
           // If 'yavshoke' is selected, show all Yavshoke sub-suppliers plus direct yavshoke
-          if (p.s !== 'yavshoke' && !p.s.startsWith('ys_')) return false;
-        } else if (p.s !== selectedSupplier) {
+          if (s !== 'yavshoke' && !s.startsWith('ys_')) return false;
+        } else if (s !== selectedSupplier) {
           return false;
         }
       }
