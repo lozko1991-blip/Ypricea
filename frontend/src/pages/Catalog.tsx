@@ -415,10 +415,14 @@ export default function Catalog() {
 
   // Extract keywords for analog search
   const extractKeywords = (name: string) => {
-    // Remove punctuation, numbers, short words
-    const words = name.replace(/[^\w\sА-Яа-яІіЇїЄєҐґ]/gi, ' ')
+    const stopWords = new Set(['для', 'від', 'під', 'із', 'чорний', 'білий', 'червоний', 'синій', 'зелений', 'сірий', 'жовтий', 'рожевий', 'колір', 'чохол', 'на', 'та', 'або', 'і', 'з', 'у', 'в']);
+    
+    // Remove punctuation (except hyphens and pluses which might be part of model numbers like T2-0967)
+    const words = name.replace(/[^\w\sА-Яа-яІіЇїЄєҐґ\-+]/gi, ' ')
                       .split(/\s+/)
-                      .filter(w => w.length > 2 && isNaN(Number(w)));
+                      .map(w => w.toLowerCase().replace(/^-+|-+$/g, ''))
+                      .filter(w => w.length > 1 && !stopWords.has(w));
+                      
     return words.slice(0, 3).join(' ');
   };
 
@@ -429,16 +433,24 @@ export default function Catalog() {
     const keywords = extractKeywords(selectedProduct.n);
     setSearchTerm(keywords);
     
-    // Set price range ±15% (min ±50 UAH)
+    // Set price range ±30% (min ±50 UAH)
     const price = selectedProduct.pr;
-    const diff = Math.max(50, Math.floor(price * 0.15));
+    const diff = Math.max(50, Math.floor(price * 0.30));
     setMinPrice(Math.max(0, price - diff).toString());
     setMaxPrice((price + diff).toString());
     
     setInStockOnly(true);
+    setSelectedBrand('all'); // Clear brand filter for analog search
+    
     const isYavshoke = !selectedProduct.s || selectedProduct.s === 'yavshoke' || selectedProduct.s.startsWith('ys_');
     setSelectedSupplier(globalSearch ? (isYavshoke ? 'yavshoke' : 'all') : (selectedProduct.s || 'yavshoke'));
-    handleSelectCategory(selectedProduct.c);
+    
+    if (globalSearch) {
+      handleSelectCategory('all');
+    } else {
+      handleSelectCategory(selectedProduct.c);
+    }
+    
     setSelectedProduct(null);
     setCurrentPage(1);
     
@@ -1360,7 +1372,6 @@ export default function Catalog() {
               </div>
             </div>
           </div>
-          </div>
           {productsLoading ? (
             <div className="card flex flex-col items-center justify-center py-24 text-[var(--text2)]">
               <Loader2 className="animate-spin mb-4" size={32} />
@@ -1510,6 +1521,7 @@ export default function Catalog() {
           )}
         </div>
 
+        </div>
         {/* Rightmost Suppliers Column (Desktop Sidebar 2) */}
         <aside className="card w-48 shrink-0 hidden lg:flex flex-col sticky top-20 h-[calc(100vh-120px)] overflow-hidden">
           {renderSuppliersList()}
@@ -1704,7 +1716,7 @@ export default function Catalog() {
                     </div>
                     {selectedProduct.a === 0 && (
                       <span className="text-[10px] text-[var(--text2)] text-center font-semibold">
-                        (В межах ±15% від ціни)
+                        (В межах ±30% від ціни)
                       </span>
                     )}
                   </div>

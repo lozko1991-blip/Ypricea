@@ -21,10 +21,10 @@ export function masterevaOfferSrc(offerId, categoryId) {
   const offId = String(offerId || '');
   const catId = String(categoryId || '');
   
-  if (offId.startsWith('1000_')) return 'ev_dropt';
+  if (offId.startsWith('1000_')) return 'ev_optdrop';
   if (offId.startsWith('1100_')) return 'ev_forus';
   if (offId.startsWith('1111_')) return 'ev_shkatulka';
-  if (offId.startsWith('2222_')) return 'ev_optdrop';
+  if (offId.startsWith('2222_')) return 'ev_dropt';
   if (offId.startsWith('3000_')) return 'ev_dropshipping';
   if (offId.startsWith('3333_')) return 'ev_lugi';
   if (offId.startsWith('4444_')) return 'ev_dropom';
