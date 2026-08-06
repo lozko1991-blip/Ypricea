@@ -218,6 +218,19 @@ function matchProduct(p: CatalogProduct, tokens: SearchToken[]): boolean {
   });
 }
 
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+  return debouncedValue;
+}
+
 export default function Catalog() {
   const { addToCart } = useCart();
   const [data, setData] = useState<IndexData | null>(null);
@@ -707,9 +720,11 @@ export default function Catalog() {
   };
 
   // Filtered Products List
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+
   const filteredProducts = useMemo(() => {
     if (!data) return [];
-    const tokens = searchTerm.trim() ? parseQuery(searchTerm) : [];
+    const tokens = debouncedSearchTerm.trim() ? parseQuery(debouncedSearchTerm) : [];
 
     return data.products.filter(p => {
       // 1. Supplier filter
@@ -749,7 +764,7 @@ export default function Catalog() {
       
       return true;
     });
-  }, [data, selectedSupplier, activeBranchCategoryIds, searchTerm, selectedBrand, minPrice, maxPrice, inStockOnly]);
+  }, [data, selectedSupplier, activeBranchCategoryIds, debouncedSearchTerm, selectedBrand, minPrice, maxPrice, inStockOnly]);
 
   // Pagination Variables
   const totalProducts = filteredProducts.length;
