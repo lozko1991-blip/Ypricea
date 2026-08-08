@@ -1372,6 +1372,7 @@ export default function Catalog() {
               </div>
             </div>
           </div>
+          </div>
           {productsLoading ? (
             <div className="card flex flex-col items-center justify-center py-24 text-[var(--text2)]">
               <Loader2 className="animate-spin mb-4" size={32} />
@@ -1526,7 +1527,7 @@ export default function Catalog() {
           {renderSuppliersList()}
         </aside>
       </div>
-    </div>
+
 
       {/* Mobile Drawer (Sidebar) */}
       <div className={`fixed inset-0 z-50 lg:hidden transition-opacity duration-300 ${isMobileSidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
