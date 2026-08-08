@@ -1372,6 +1372,7 @@ export default function Catalog() {
               </div>
             </div>
           </div>
+          </div>
           {productsLoading ? (
             <div className="card flex flex-col items-center justify-center py-24 text-[var(--text2)]">
               <Loader2 className="animate-spin mb-4" size={32} />
@@ -1519,8 +1520,6 @@ export default function Catalog() {
               {renderPagination()}
             </>
           )}
-        </div>
-
         {/* Rightmost Suppliers Column (Desktop Sidebar 2) */}
         <aside className="card w-48 shrink-0 hidden lg:flex flex-col sticky top-20 h-[calc(100vh-120px)] overflow-hidden">
           {renderSuppliersList()}
