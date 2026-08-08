@@ -1521,12 +1521,12 @@ export default function Catalog() {
           )}
         </div>
 
-        </div>
         {/* Rightmost Suppliers Column (Desktop Sidebar 2) */}
         <aside className="card w-48 shrink-0 hidden lg:flex flex-col sticky top-20 h-[calc(100vh-120px)] overflow-hidden">
           {renderSuppliersList()}
         </aside>
       </div>
+    </div>
 
       {/* Mobile Drawer (Sidebar) */}
       <div className={`fixed inset-0 z-50 lg:hidden transition-opacity duration-300 ${isMobileSidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
